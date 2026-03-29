@@ -1,37 +1,37 @@
 <template>
   <div class="workbench-panel">
     <div class="scroll-container">
-      <!-- Step 01: Ontology -->
+      <!-- Schritt 01: Ontologie -->
       <div class="step-card" :class="{ 'active': currentPhase === 0, 'completed': currentPhase > 0 }">
         <div class="card-header">
           <div class="step-info">
             <span class="step-num">01</span>
-            <span class="step-title">本体生成</span>
+            <span class="step-title">Ontologie-Generierung</span>
           </div>
           <div class="step-status">
-            <span v-if="currentPhase > 0" class="badge success">已完成</span>
-            <span v-else-if="currentPhase === 0" class="badge processing">生成中</span>
-            <span v-else class="badge pending">等待</span>
+            <span v-if="currentPhase > 0" class="badge success">Abgeschlossen</span>
+            <span v-else-if="currentPhase === 0" class="badge processing">Generierung</span>
+            <span v-else class="badge pending">Warten</span>
           </div>
         </div>
         
         <div class="card-content">
           <p class="api-note">POST /api/graph/ontology/generate</p>
           <p class="description">
-            LLM分析文档内容与模拟需求，提取出现实种子，自动生成合适的本体结构
+            LLM analysiert Dokumentinhalte und Simulationsanforderungen, extrahiert Realitaetskeime und generiert automatisch eine geeignete Ontologiestruktur
           </p>
 
-          <!-- Loading / Progress -->
+          <!-- Ladevorgang / Fortschritt -->
           <div v-if="currentPhase === 0 && ontologyProgress" class="progress-section">
             <div class="spinner-sm"></div>
-            <span>{{ ontologyProgress.message || '正在分析文档...' }}</span>
+            <span>{{ ontologyProgress.message || 'Dokumente werden analysiert...' }}</span>
           </div>
 
-          <!-- Detail Overlay -->
+          <!-- Detail-Overlay -->
           <div v-if="selectedOntologyItem" class="ontology-detail-overlay">
             <div class="detail-header">
                <div class="detail-title-group">
-                  <span class="detail-type-badge">{{ selectedOntologyItem.itemType === 'entity' ? 'ENTITY' : 'RELATION' }}</span>
+                  <span class="detail-type-badge">{{ selectedOntologyItem.itemType === 'entity' ? 'ENTITAET' : 'BEZIEHUNG' }}</span>
                   <span class="detail-name">{{ selectedOntologyItem.name }}</span>
                </div>
                <button class="close-btn" @click="selectedOntologyItem = null">×</button>
@@ -39,9 +39,9 @@
             <div class="detail-body">
                <div class="detail-desc">{{ selectedOntologyItem.description }}</div>
                
-               <!-- Attributes -->
+               <!-- Attribute -->
                <div class="detail-section" v-if="selectedOntologyItem.attributes?.length">
-                  <span class="section-label">ATTRIBUTES</span>
+                  <span class="section-label">ATTRIBUTE</span>
                   <div class="attr-list">
                      <div v-for="attr in selectedOntologyItem.attributes" :key="attr.name" class="attr-item">
                         <span class="attr-name">{{ attr.name }}</span>
@@ -51,17 +51,17 @@
                   </div>
                </div>
 
-               <!-- Examples (Entity) -->
+               <!-- Beispiele (Entitaet) -->
                <div class="detail-section" v-if="selectedOntologyItem.examples?.length">
-                  <span class="section-label">EXAMPLES</span>
+                  <span class="section-label">BEISPIELE</span>
                   <div class="example-list">
                      <span v-for="ex in selectedOntologyItem.examples" :key="ex" class="example-tag">{{ ex }}</span>
                   </div>
                </div>
 
-               <!-- Source/Target (Relation) -->
+               <!-- Quelle/Ziel (Beziehung) -->
                <div class="detail-section" v-if="selectedOntologyItem.source_targets?.length">
-                  <span class="section-label">CONNECTIONS</span>
+                  <span class="section-label">VERBINDUNGEN</span>
                   <div class="conn-list">
                      <div v-for="(conn, idx) in selectedOntologyItem.source_targets" :key="idx" class="conn-item">
                         <span class="conn-node">{{ conn.source }}</span>
@@ -73,9 +73,9 @@
             </div>
           </div>
 
-          <!-- Generated Entity Tags -->
+          <!-- Generierte Entitaetstypen -->
           <div v-if="projectData?.ontology?.entity_types" class="tags-container" :class="{ 'dimmed': selectedOntologyItem }">
-            <span class="tag-label">GENERATED ENTITY TYPES</span>
+            <span class="tag-label">GENERIERTE ENTITAETSTYPEN</span>
             <div class="tags-list">
               <span 
                 v-for="entity in projectData.ontology.entity_types" 
@@ -88,9 +88,9 @@
             </div>
           </div>
 
-          <!-- Generated Relation Tags -->
+          <!-- Generierte Beziehungstypen -->
           <div v-if="projectData?.ontology?.edge_types" class="tags-container" :class="{ 'dimmed': selectedOntologyItem }">
-            <span class="tag-label">GENERATED RELATION TYPES</span>
+            <span class="tag-label">GENERIERTE BEZIEHUNGSTYPEN</span>
             <div class="tags-list">
               <span 
                 v-for="rel in projectData.ontology.edge_types" 
@@ -105,75 +105,75 @@
         </div>
       </div>
 
-      <!-- Step 02: Graph Build -->
+      <!-- Schritt 02: Graph-Aufbau -->
       <div class="step-card" :class="{ 'active': currentPhase === 1, 'completed': currentPhase > 1 }">
         <div class="card-header">
           <div class="step-info">
             <span class="step-num">02</span>
-            <span class="step-title">GraphRAG构建</span>
+            <span class="step-title">GraphRAG-Aufbau</span>
           </div>
           <div class="step-status">
-            <span v-if="currentPhase > 1" class="badge success">已完成</span>
+            <span v-if="currentPhase > 1" class="badge success">Abgeschlossen</span>
             <span v-else-if="currentPhase === 1" class="badge processing">{{ buildProgress?.progress || 0 }}%</span>
-            <span v-else class="badge pending">等待</span>
+            <span v-else class="badge pending">Warten</span>
           </div>
         </div>
 
         <div class="card-content">
           <p class="api-note">POST /api/graph/build</p>
           <p class="description">
-            基于生成的本体，将文档自动分块后调用 Zep 构建知识图谱，提取实体和关系，并形成时序记忆与社区摘要
+            Basierend auf der generierten Ontologie werden Dokumente automatisch segmentiert und ueber Zep ein Wissensgraph aufgebaut, Entitaeten und Beziehungen extrahiert sowie zeitliche Erinnerungen und Community-Zusammenfassungen erstellt
           </p>
-          
-          <!-- Stats Cards -->
+
+          <!-- Statistikkarten -->
           <div class="stats-grid">
             <div class="stat-card">
               <span class="stat-value">{{ graphStats.nodes }}</span>
-              <span class="stat-label">实体节点</span>
+              <span class="stat-label">Entitaetsknoten</span>
             </div>
             <div class="stat-card">
               <span class="stat-value">{{ graphStats.edges }}</span>
-              <span class="stat-label">关系边</span>
+              <span class="stat-label">Beziehungskanten</span>
             </div>
             <div class="stat-card">
               <span class="stat-value">{{ graphStats.types }}</span>
-              <span class="stat-label">SCHEMA类型</span>
+              <span class="stat-label">SCHEMA-Typen</span>
             </div>
           </div>
         </div>
       </div>
 
-      <!-- Step 03: Complete -->
+      <!-- Schritt 03: Abgeschlossen -->
       <div class="step-card" :class="{ 'active': currentPhase === 2, 'completed': currentPhase >= 2 }">
         <div class="card-header">
           <div class="step-info">
             <span class="step-num">03</span>
-            <span class="step-title">构建完成</span>
+            <span class="step-title">Aufbau abgeschlossen</span>
           </div>
           <div class="step-status">
-            <span v-if="currentPhase >= 2" class="badge accent">进行中</span>
+            <span v-if="currentPhase >= 2" class="badge accent">In Bearbeitung</span>
           </div>
         </div>
         
         <div class="card-content">
           <p class="api-note">POST /api/simulation/create</p>
-          <p class="description">图谱构建已完成，请进入下一步进行模拟环境搭建</p>
-          <button 
-            class="action-btn" 
+          <p class="description">Graphaufbau abgeschlossen. Bitte fahren Sie mit dem naechsten Schritt zur Simulationsumgebung fort.</p>
+          <button
+            class="action-btn"
             :disabled="currentPhase < 2 || creatingSimulation"
             @click="handleEnterEnvSetup"
           >
             <span v-if="creatingSimulation" class="spinner-sm"></span>
-            {{ creatingSimulation ? '创建中...' : '进入环境搭建 ➝' }}
+            {{ creatingSimulation ? 'Wird erstellt...' : 'Zur Umgebungseinrichtung ➝' }}
           </button>
         </div>
       </div>
     </div>
 
-    <!-- Bottom Info / Logs -->
+    <!-- Untere Info / Protokolle -->
     <div class="system-logs">
       <div class="log-header">
-        <span class="log-title">SYSTEM DASHBOARD</span>
+        <span class="log-title">SYSTEM-DASHBOARD</span>
         <span class="log-id">{{ projectData?.project_id || 'NO_PROJECT' }}</span>
       </div>
       <div class="log-content" ref="logContent">
@@ -208,10 +208,10 @@ const selectedOntologyItem = ref(null)
 const logContent = ref(null)
 const creatingSimulation = ref(false)
 
-// 进入环境搭建 - 创建 simulation 并跳转
+// Umgebungseinrichtung betreten - Simulation erstellen und weiterleiten
 const handleEnterEnvSetup = async () => {
   if (!props.projectData?.project_id || !props.projectData?.graph_id) {
-    console.error('缺少项目或图谱信息')
+    console.error('Projekt- oder Graph-Informationen fehlen')
     return
   }
   
@@ -226,18 +226,18 @@ const handleEnterEnvSetup = async () => {
     })
     
     if (res.success && res.data?.simulation_id) {
-      // 跳转到 simulation 页面
+      // Zur Simulationsseite weiterleiten
       router.push({
         name: 'Simulation',
         params: { simulationId: res.data.simulation_id }
       })
     } else {
-      console.error('创建模拟失败:', res.error)
-      alert('创建模拟失败: ' + (res.error || '未知错误'))
+      console.error('Simulationserstellung fehlgeschlagen:', res.error)
+      alert('Simulationserstellung fehlgeschlagen: ' + (res.error || 'Unbekannter Fehler'))
     }
   } catch (err) {
-    console.error('创建模拟异常:', err)
-    alert('创建模拟异常: ' + err.message)
+    console.error('Simulationserstellung - Ausnahme:', err)
+    alert('Simulationserstellung - Ausnahme: ' + err.message)
   } finally {
     creatingSimulation.value = false
   }
@@ -260,7 +260,7 @@ const formatDate = (dateStr) => {
   return d.toLocaleTimeString('en-US', { hour12: false }) + '.' + d.getMilliseconds()
 }
 
-// Auto-scroll logs
+// Automatisches Scrollen der Protokolle
 watch(() => props.systemLogs.length, () => {
   nextTick(() => {
     if (logContent.value) {
@@ -362,7 +362,7 @@ watch(() => props.systemLogs.length, () => {
   margin-bottom: 16px;
 }
 
-/* Step 01 Tags */
+/* Schritt 01 Tags */
 .tags-container {
   margin-top: 12px;
   transition: opacity 0.3s;
@@ -407,7 +407,7 @@ watch(() => props.systemLogs.length, () => {
     border-color: #CCC;
 }
 
-/* Ontology Detail Overlay */
+/* Ontologie-Detail-Overlay */
 .ontology-detail-overlay {
     position: absolute;
     top: 60px; /* Below header roughly */
@@ -568,7 +568,7 @@ watch(() => props.systemLogs.length, () => {
     color: #BBB;
 }
 
-/* Step 02 Stats */
+/* Schritt 02 Statistiken */
 .stats-grid {
   display: grid;
   grid-template-columns: 1fr 1fr 1fr;
@@ -598,7 +598,7 @@ watch(() => props.systemLogs.length, () => {
   display: block;
 }
 
-/* Step 03 Button */
+/* Schritt 03 Button */
 .action-btn {
   width: 100%;
   background: #000;
@@ -641,7 +641,7 @@ watch(() => props.systemLogs.length, () => {
 
 @keyframes spin { to { transform: rotate(360deg); } }
 
-/* System Logs */
+/* Systemprotokolle */
 .system-logs {
   background: #000;
   color: #DDD;

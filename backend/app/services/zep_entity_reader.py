@@ -1,6 +1,6 @@
 """
-Zep实体读取与过滤服务
-从Zep图谱中读取节点，筛选出符合预定义实体类型的节点
+Zep-Entitaetslese- und Filterdienst
+Knoten aus dem Zep-Graph lesen und Knoten filtern, die vordefinierten Entitaetstypen entsprechen
 """
 
 import time
@@ -15,21 +15,21 @@ from ..utils.zep_paging import fetch_all_nodes, fetch_all_edges
 
 logger = get_logger('mirofish.zep_entity_reader')
 
-# 用于泛型返回类型
+# Fuer generischen Rueckgabetyp
 T = TypeVar('T')
 
 
 @dataclass
 class EntityNode:
-    """实体节点数据结构"""
+    """Entitaetsknoten-Datenstruktur"""
     uuid: str
     name: str
     labels: List[str]
     summary: str
     attributes: Dict[str, Any]
-    # 相关的边信息
+    # Zugehoerige Kanteninformationen
     related_edges: List[Dict[str, Any]] = field(default_factory=list)
-    # 相关的其他节点信息
+    # Zugehoerige andere Knoteninformationen
     related_nodes: List[Dict[str, Any]] = field(default_factory=list)
     
     def to_dict(self) -> Dict[str, Any]:
@@ -44,7 +44,7 @@ class EntityNode:
         }
     
     def get_entity_type(self) -> Optional[str]:
-        """获取实体类型（排除默认的Entity标签）"""
+        """Entitaetstyp abrufen (Standard-Entity-Label ausschliessen)"""
         for label in self.labels:
             if label not in ["Entity", "Node"]:
                 return label
@@ -53,7 +53,7 @@ class EntityNode:
 
 @dataclass
 class FilteredEntities:
-    """过滤后的实体集合"""
+    """Gefilterte Entitaetssammlung"""
     entities: List[EntityNode]
     entity_types: Set[str]
     total_count: int
@@ -70,18 +70,18 @@ class FilteredEntities:
 
 class ZepEntityReader:
     """
-    Zep实体读取与过滤服务
-    
-    主要功能：
-    1. 从Zep图谱读取所有节点
-    2. 筛选出符合预定义实体类型的节点（Labels不只是Entity的节点）
-    3. 获取每个实体的相关边和关联节点信息
+    Zep-Entitaetslese- und Filterdienst
+
+    Hauptfunktionen:
+    1. Alle Knoten aus dem Zep-Graph lesen
+    2. Knoten filtern, die vordefinierten Entitaetstypen entsprechen (Knoten mit Labels ausser nur Entity)
+    3. Zugehoerige Kanten- und verknuepfte Knoteninformationen fuer jede Entitaet abrufen
     """
     
     def __init__(self, api_key: Optional[str] = None):
         self.api_key = api_key or Config.ZEP_API_KEY
         if not self.api_key:
-            raise ValueError("ZEP_API_KEY 未配置")
+            raise ValueError("ZEP_API_KEY ist nicht konfiguriert")
         
         self.client = Zep(api_key=self.api_key)
     
@@ -93,16 +93,16 @@ class ZepEntityReader:
         initial_delay: float = 2.0
     ) -> T:
         """
-        带重试机制的Zep API调用
-        
+        Zep-API-Aufruf mit Wiederholungsmechanismus
+
         Args:
-            func: 要执行的函数（无参数的lambda或callable）
-            operation_name: 操作名称，用于日志
-            max_retries: 最大重试次数（默认3次，即最多尝试3次）
-            initial_delay: 初始延迟秒数
-            
+            func: Auszufuehrende Funktion (parameterlose Lambda oder Callable)
+            operation_name: Operationsname fuer Protokollierung
+            max_retries: Maximale Anzahl der Wiederholungen (Standard 3, d.h. maximal 3 Versuche)
+            initial_delay: Anfangsverzoegerung in Sekunden
+
         Returns:
-            API调用结果
+            API-Aufrufergebnis
         """
         last_exception = None
         delay = initial_delay
@@ -126,15 +126,15 @@ class ZepEntityReader:
     
     def get_all_nodes(self, graph_id: str) -> List[Dict[str, Any]]:
         """
-        获取图谱的所有节点（分页获取）
+        Alle Knoten des Graphen abrufen (paginiert)
 
         Args:
-            graph_id: 图谱ID
+            graph_id: Graph-ID
 
         Returns:
-            节点列表
+            Knotenliste
         """
-        logger.info(f"获取图谱 {graph_id} 的所有节点...")
+        logger.info(f"Alle Knoten des Graphen {graph_id} werden abgerufen...")
 
         nodes = fetch_all_nodes(self.client, graph_id)
 
@@ -148,20 +148,20 @@ class ZepEntityReader:
                 "attributes": node.attributes or {},
             })
 
-        logger.info(f"共获取 {len(nodes_data)} 个节点")
+        logger.info(f"Insgesamt {len(nodes_data)} Knoten abgerufen")
         return nodes_data
 
     def get_all_edges(self, graph_id: str) -> List[Dict[str, Any]]:
         """
-        获取图谱的所有边（分页获取）
+        Alle Kanten des Graphen abrufen (paginiert)
 
         Args:
-            graph_id: 图谱ID
+            graph_id: Graph-ID
 
         Returns:
-            边列表
+            Kantenliste
         """
-        logger.info(f"获取图谱 {graph_id} 的所有边...")
+        logger.info(f"Alle Kanten des Graphen {graph_id} werden abgerufen...")
 
         edges = fetch_all_edges(self.client, graph_id)
 
@@ -176,21 +176,21 @@ class ZepEntityReader:
                 "attributes": edge.attributes or {},
             })
 
-        logger.info(f"共获取 {len(edges_data)} 条边")
+        logger.info(f"Insgesamt {len(edges_data)} Kanten abgerufen")
         return edges_data
     
     def get_node_edges(self, node_uuid: str) -> List[Dict[str, Any]]:
         """
-        获取指定节点的所有相关边（带重试机制）
-        
+        Alle zugehoerigen Kanten eines bestimmten Knotens abrufen (mit Wiederholungsmechanismus)
+
         Args:
-            node_uuid: 节点UUID
-            
+            node_uuid: Knoten-UUID
+
         Returns:
-            边列表
+            Kantenliste
         """
         try:
-            # 使用重试机制调用Zep API
+            # Zep-API mit Wiederholungsmechanismus aufrufen
             edges = self._call_with_retry(
                 func=lambda: self.client.graph.node.get_entity_edges(node_uuid=node_uuid),
                 operation_name=f"获取节点边(node={node_uuid[:8]}...)"
@@ -209,7 +209,7 @@ class ZepEntityReader:
             
             return edges_data
         except Exception as e:
-            logger.warning(f"获取节点 {node_uuid} 的边失败: {str(e)}")
+            logger.warning(f"Abrufen der Kanten von Knoten {node_uuid} fehlgeschlagen: {str(e)}")
             return []
     
     def filter_defined_entities(
@@ -219,47 +219,47 @@ class ZepEntityReader:
         enrich_with_edges: bool = True
     ) -> FilteredEntities:
         """
-        筛选出符合预定义实体类型的节点
-        
-        筛选逻辑：
-        - 如果节点的Labels只有一个"Entity"，说明这个实体不符合我们预定义的类型，跳过
-        - 如果节点的Labels包含除"Entity"和"Node"之外的标签，说明符合预定义类型，保留
-        
+        Knoten filtern, die vordefinierten Entitaetstypen entsprechen
+
+        Filterlogik:
+        - Wenn Knoten-Labels nur "Entity" enthalten, entspricht die Entitaet nicht unserem vordefinierten Typ, ueberspringen
+        - Wenn Knoten-Labels Labels ausser "Entity" und "Node" enthalten, entspricht dies dem vordefinierten Typ, beibehalten
+
         Args:
-            graph_id: 图谱ID
-            defined_entity_types: 预定义的实体类型列表（可选，如果提供则只保留这些类型）
-            enrich_with_edges: 是否获取每个实体的相关边信息
-            
+            graph_id: Graph-ID
+            defined_entity_types: Liste vordefinierter Entitaetstypen (optional, wenn angegeben nur diese Typen beibehalten)
+            enrich_with_edges: Ob zugehoerige Kanteninformationen fuer jede Entitaet abgerufen werden sollen
+
         Returns:
-            FilteredEntities: 过滤后的实体集合
+            FilteredEntities: Gefilterte Entitaetssammlung
         """
-        logger.info(f"开始筛选图谱 {graph_id} 的实体...")
+        logger.info(f"Entitaeten des Graphen {graph_id} werden gefiltert...")
         
-        # 获取所有节点
+        # Alle Knoten abrufen
         all_nodes = self.get_all_nodes(graph_id)
         total_count = len(all_nodes)
         
-        # 获取所有边（用于后续关联查找）
+        # Alle Kanten abrufen (fuer spaetere Verknuepfungssuche)
         all_edges = self.get_all_edges(graph_id) if enrich_with_edges else []
         
-        # 构建节点UUID到节点数据的映射
+        # Knoten-UUID-zu-Knotendaten-Zuordnung erstellen
         node_map = {n["uuid"]: n for n in all_nodes}
         
-        # 筛选符合条件的实体
+        # Passende Entitaeten filtern
         filtered_entities = []
         entity_types_found = set()
         
         for node in all_nodes:
             labels = node.get("labels", [])
             
-            # 筛选逻辑：Labels必须包含除"Entity"和"Node"之外的标签
+            # Filterlogik: Labels muessen Labels ausser "Entity" und "Node" enthalten
             custom_labels = [l for l in labels if l not in ["Entity", "Node"]]
             
             if not custom_labels:
-                # 只有默认标签，跳过
+                # Nur Standard-Labels, ueberspringen
                 continue
             
-            # 如果指定了预定义类型，检查是否匹配
+            # Falls vordefinierte Typen angegeben, Uebereinstimmung pruefen
             if defined_entity_types:
                 matching_labels = [l for l in custom_labels if l in defined_entity_types]
                 if not matching_labels:
@@ -270,7 +270,7 @@ class ZepEntityReader:
             
             entity_types_found.add(entity_type)
             
-            # 创建实体节点对象
+            # Entitaetsknotenobjekt erstellen
             entity = EntityNode(
                 uuid=node["uuid"],
                 name=node["name"],
@@ -279,7 +279,7 @@ class ZepEntityReader:
                 attributes=node["attributes"],
             )
             
-            # 获取相关边和节点
+            # Zugehoerige Kanten und Knoten abrufen
             if enrich_with_edges:
                 related_edges = []
                 related_node_uuids = set()
@@ -304,7 +304,7 @@ class ZepEntityReader:
                 
                 entity.related_edges = related_edges
                 
-                # 获取关联节点的基本信息
+                # Grundinformationen verknuepfter Knoten abrufen
                 related_nodes = []
                 for related_uuid in related_node_uuids:
                     if related_uuid in node_map:
@@ -320,8 +320,8 @@ class ZepEntityReader:
             
             filtered_entities.append(entity)
         
-        logger.info(f"筛选完成: 总节点 {total_count}, 符合条件 {len(filtered_entities)}, "
-                   f"实体类型: {entity_types_found}")
+        logger.info(f"Filterung abgeschlossen: Gesamt-Knoten {total_count}, passend {len(filtered_entities)}, "
+                   f"Entitaetstypen: {entity_types_found}")
         
         return FilteredEntities(
             entities=filtered_entities,
@@ -336,17 +336,17 @@ class ZepEntityReader:
         entity_uuid: str
     ) -> Optional[EntityNode]:
         """
-        获取单个实体及其完整上下文（边和关联节点，带重试机制）
-        
+        Einzelne Entitaet mit vollstaendigem Kontext abrufen (Kanten und verknuepfte Knoten, mit Wiederholungsmechanismus)
+
         Args:
-            graph_id: 图谱ID
-            entity_uuid: 实体UUID
-            
+            graph_id: Graph-ID
+            entity_uuid: Entitaets-UUID
+
         Returns:
-            EntityNode或None
+            EntityNode oder None
         """
         try:
-            # 使用重试机制获取节点
+            # Knoten mit Wiederholungsmechanismus abrufen
             node = self._call_with_retry(
                 func=lambda: self.client.graph.node.get(uuid_=entity_uuid),
                 operation_name=f"获取节点详情(uuid={entity_uuid[:8]}...)"
@@ -355,14 +355,14 @@ class ZepEntityReader:
             if not node:
                 return None
             
-            # 获取节点的边
+            # Kanten des Knotens abrufen
             edges = self.get_node_edges(entity_uuid)
             
-            # 获取所有节点用于关联查找
+            # Alle Knoten abrufen用于关联查找
             all_nodes = self.get_all_nodes(graph_id)
             node_map = {n["uuid"]: n for n in all_nodes}
             
-            # 处理相关边和节点
+            # Zugehoerige Kanten und Knoten verarbeiten
             related_edges = []
             related_node_uuids = set()
             
@@ -384,7 +384,7 @@ class ZepEntityReader:
                     })
                     related_node_uuids.add(edge["source_node_uuid"])
             
-            # 获取关联节点信息
+            # Verknuepfte Knoteninformationen abrufen
             related_nodes = []
             for related_uuid in related_node_uuids:
                 if related_uuid in node_map:
