@@ -58,7 +58,7 @@
                       <path d="M12 2a10 10 0 0 1 10 10" stroke-width="4" stroke="#4B5563" stroke-linecap="round"></path>
                     </svg>
                   </div>
-                  <span class="loading-text">正在生成{{ section.title }}...</span>
+                  <span class="loading-text">{{ section.title }} wird erstellt...</span>
                 </div>
               </div>
             </div>
@@ -496,16 +496,16 @@ const saveChatHistory = () => {
 }
 
 const selectReportAgentChat = () => {
-  // 保存当前对话记录
+  // Aktuellen Chatverlauf speichern
   saveChatHistory()
-  
+
   activeTab.value = 'chat'
   chatTarget.value = 'report_agent'
   selectedAgent.value = null
   selectedAgentIndex.value = null
   showAgentDropdown.value = false
   
-  // 恢复 Report Agent 的对话记录
+  // Chatverlauf des Report Agent wiederherstellen
   chatHistory.value = chatHistoryCache.value['report_agent'] || []
 }
 
@@ -525,15 +525,15 @@ const toggleAgentDropdown = () => {
 }
 
 const selectAgent = (agent, idx) => {
-  // 保存当前对话记录
+  // Aktuellen Chatverlauf speichern
   saveChatHistory()
-  
+
   selectedAgent.value = agent
   selectedAgentIndex.value = idx
   chatTarget.value = 'agent'
   showAgentDropdown.value = false
   
-  // 恢复该 Agent 的对话记录
+  // Chatverlauf dieses Agents wiederherstellen
   chatHistory.value = chatHistoryCache.value[`agent_${idx}`] || []
   addLog(`Gespraechspartner gewaehlt: ${agent.username}`)
 }
@@ -573,17 +573,17 @@ const renderMarkdown = (content) => {
     return `<li class="md-oli" data-level="${level}">${text}</li>`
   })
   
-  // 包装无序列表
+  // Ungeordnete Listen umschliessen
   html = html.replace(/(<li class="md-li"[^>]*>.*?<\/li>\s*)+/g, '<ul class="md-ul">$&</ul>')
-  // 包装有序列表
+  // Geordnete Listen umschliessen
   html = html.replace(/(<li class="md-oli"[^>]*>.*?<\/li>\s*)+/g, '<ol class="md-ol">$&</ol>')
   
-  // 清理列表项之间的所有空白
+  // Alle Leerzeichen zwischen Listenelementen bereinigen
   html = html.replace(/<\/li>\s+<li/g, '</li><li')
-  // 清理列表开始标签后的空白
+  // Leerzeichen nach Listen-Oeffnungstags bereinigen
   html = html.replace(/<ul class="md-ul">\s+/g, '<ul class="md-ul">')
   html = html.replace(/<ol class="md-ol">\s+/g, '<ol class="md-ol">')
-  // 清理列表结束标签前的空白
+  // Leerzeichen vor Listen-Schlusstags bereinigen
   html = html.replace(/\s+<\/ul>/g, '</ul>')
   html = html.replace(/\s+<\/ol>/g, '</ol>')
   
@@ -599,17 +599,17 @@ const renderMarkdown = (content) => {
   html = html.replace(/(<\/h[2-5]>)<\/p>/g, '$1')
   html = html.replace(/<p class="md-p">(<ul|<ol|<blockquote|<pre|<hr)/g, '$1')
   html = html.replace(/(<\/ul>|<\/ol>|<\/blockquote>|<\/pre>)<\/p>/g, '$1')
-  // 清理块级元素前后的 <br> 标签
+  // <br>-Tags vor und nach Blockelementen bereinigen
   html = html.replace(/<br>\s*(<ul|<ol|<blockquote)/g, '$1')
   html = html.replace(/(<\/ul>|<\/ol>|<\/blockquote>)\s*<br>/g, '$1')
-  // 清理 <p><br> 紧跟块级元素的情况（多余空行导致）
+  // <p><br> direkt vor Blockelementen bereinigen (verursacht durch ueberfluessige Leerzeilen)
   html = html.replace(/<p class="md-p">(<br>\s*)+(<ul|<ol|<blockquote|<pre|<hr)/g, '$2')
-  // 清理连续的 <br> 标签
+  // Aufeinanderfolgende <br>-Tags bereinigen
   html = html.replace(/(<br>\s*){2,}/g, '<br>')
-  // 清理块级元素后紧跟的段落开始标签前的 <br>
+  // <br> vor Absatz-Oeffnungstags nach Blockelementen bereinigen
   html = html.replace(/(<\/ol>|<\/ul>|<\/blockquote>)<br>(<p|<div)/g, '$1$2')
 
-  // 修复非连续有序列表的编号：当单项 <ol> 被段落内容隔开时，保持编号递增
+  // Nummerierung nicht aufeinanderfolgender geordneter Listen korrigieren: Wenn einzelne <ol> durch Absaetze getrennt sind, fortlaufende Nummerierung beibehalten
   const tokens = html.split(/(<ol class="md-ol">(?:<li class="md-oli"[^>]*>[\s\S]*?<\/li>)+<\/ol>)/g)
   let olCounter = 0
   let inSequence = false
@@ -677,7 +677,7 @@ const sendMessage = async () => {
 }
 
 const sendToReportAgent = async (message) => {
-  addLog(`向 Report Agent 发送: ${message.substring(0, 50)}...`)
+  addLog(`An Report Agent gesendet: ${message.substring(0, 50)}...`)
   
   // Build chat history for API
   const historyForApi = chatHistory.value
@@ -700,7 +700,7 @@ const sendToReportAgent = async (message) => {
       content: res.data.response || res.data.answer || 'Keine Antwort',
       timestamp: new Date().toISOString()
     })
-    addLog('Report Agent 已回复')
+    addLog('Report Agent hat geantwortet')
   } else {
     throw new Error(res.error || 'Anfrage fehlgeschlagen')
   }
@@ -711,7 +711,7 @@ const sendToAgent = async (message) => {
     throw new Error('Bitte waehlen Sie zuerst ein simuliertes Individuum aus')
   }
   
-  addLog(`向 ${selectedAgent.value.username} 发送: ${message.substring(0, 50)}...`)
+  addLog(`An ${selectedAgent.value.username} gesendet: ${message.substring(0, 50)}...`)
   
   // Build prompt with chat history
   let prompt = message
@@ -751,7 +751,7 @@ const sendToAgent = async (message) => {
         responseContent = agentResult.response || agentResult.answer
       }
     } else if (Array.isArray(resultsDict) && resultsDict.length > 0) {
-      // 兼容数组格式
+      // Kompatibilitaet mit Array-Format
       responseContent = resultsDict[0].response || resultsDict[0].answer
     }
     
@@ -761,7 +761,7 @@ const sendToAgent = async (message) => {
         content: responseContent,
         timestamp: new Date().toISOString()
       })
-      addLog(`${selectedAgent.value.username} 已回复`)
+      addLog(`${selectedAgent.value.username} hat geantwortet`)
     } else {
       throw new Error('Keine Antwortdaten')
     }
@@ -817,12 +817,12 @@ const submitSurvey = async () => {
     })
     
     if (res.success && res.data) {
-      // 正确的数据路径: res.data.result.results 是一个对象字典
-      // 格式: {"twitter_0": {...}, "reddit_0": {...}, "twitter_1": {...}, ...}
+      // Korrekter Datenpfad: res.data.result.results ist ein Objekt-Woerterbuch
+      // Format: {"twitter_0": {...}, "reddit_0": {...}, "twitter_1": {...}, ...}
       const resultData = res.data.result || res.data
       const resultsDict = resultData.results || resultData
       
-      // 将对象字典转换为数组格式
+      // Objekt-Woerterbuch in Array-Format konvertieren
       const surveyResultsList = []
       
       for (const interview of interviews) {
@@ -837,13 +837,13 @@ const submitSurvey = async () => {
           const twitterKey = `twitter_${agentIdx}`
           const agentResult = resultsDict[redditKey] || resultsDict[twitterKey]
           if (agentResult) {
-            responseContent = agentResult.response || agentResult.answer || '无响应'
+            responseContent = agentResult.response || agentResult.answer || 'Keine Antwort'
           }
         } else if (Array.isArray(resultsDict)) {
-          // 兼容数组格式
+          // Kompatibilitaet mit Array-Format
           const matchedResult = resultsDict.find(r => r.agent_id === agentIdx)
           if (matchedResult) {
-            responseContent = matchedResult.response || matchedResult.answer || '无响应'
+            responseContent = matchedResult.response || matchedResult.answer || 'Keine Antwort'
           }
         }
         
@@ -859,7 +859,7 @@ const submitSurvey = async () => {
       surveyResults.value = surveyResultsList
       addLog(`${surveyResults.value.length} Antworten erhalten`)
     } else {
-      throw new Error(res.error || '请求失败')
+      throw new Error(res.error || 'Anfrage fehlgeschlagen')
     }
   } catch (err) {
     addLog(`Umfrageversand fehlgeschlagen: ${err.message}`)
@@ -980,7 +980,7 @@ watch(() => props.simulationId, (newId) => {
   overflow: hidden;
 }
 
-/* Left Panel - Report Style (与 Step4Report.vue 完全一致) */
+/* Left Panel - Report Style (identisch mit Step4Report.vue) */
 .left-panel.report-style {
   width: 45%;
   min-width: 450px;
@@ -2028,7 +2028,7 @@ watch(() => props.simulationId, (newId) => {
   margin-bottom: 0;
 }
 
-/* 修复有序列表编号 - 使用 CSS 计数器让多个 ol 连续编号 */
+/* Nummerierung geordneter Listen korrigieren - CSS-Zaehler fuer fortlaufende Nummerierung mehrerer ol verwenden */
 .message-text {
   counter-reset: list-counter;
 }
@@ -2054,7 +2054,7 @@ watch(() => props.simulationId, (newId) => {
   flex-shrink: 0;
 }
 
-/* 无序列表样式 */
+/* Stil fuer ungeordnete Listen */
 .message-text :deep(.md-ul) {
   padding-left: 20px;
   margin: 8px 0;
@@ -2533,7 +2533,7 @@ watch(() => props.simulationId, (newId) => {
   margin: 6px 0;
 }
 
-/* 聊天/问卷区域的引用样式 */
+/* Zitat-Stil fuer Chat-/Umfragebereich */
 .chat-messages :deep(.md-quote),
 .result-answer :deep(.md-quote) {
   margin: 12px 0;

@@ -674,16 +674,16 @@ const customMaxRounds = ref(40)   // Standard-Empfehlung: 40 Runden
 
 // Watch stage to update phase
 watch(currentStage, (newStage) => {
-  if (newStage === '生成Agent人设' || newStage === 'generating_profiles') {
+  if (newStage === 'Agent-Profile erstellen' || newStage === 'generating_profiles') {
     phase.value = 1
-  } else if (newStage === '生成模拟配置' || newStage === 'generating_config') {
+  } else if (newStage === 'Simulationskonfiguration erstellen' || newStage === 'generating_config') {
     phase.value = 2
     // In die Konfigurationsgenerierungsphase eintreten, Konfigurationsabfrage starten
     if (!configTimer) {
       addLog('Dual-Plattform-Simulationskonfiguration wird generiert...')
       startConfigPolling()
     }
-  } else if (newStage === '准备模拟脚本' || newStage === 'copying_scripts') {
+  } else if (newStage === 'Simulationsskripte vorbereiten' || newStage === 'copying_scripts') {
     phase.value = 2 // Gehoert weiterhin zur Konfigurationsphase
   }
 })
