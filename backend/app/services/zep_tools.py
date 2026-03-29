@@ -312,9 +312,10 @@ class AgentInterview:
                 # Verschiedene Anfuehrungszeichen bereinigen
                 clean_quote = quote.replace('\u201c', '').replace('\u201d', '').replace('"', '')
                 clean_quote = clean_quote.replace('\u300c', '').replace('\u300d', '')
+                clean_quote = clean_quote.replace('\u201e', '').replace('\u00bb', '').replace('\u00ab', '')
                 clean_quote = clean_quote.strip()
                 # Fuehrende Satzzeichen entfernen
-                while clean_quote and clean_quote[0] in '，,；;：:、。！？\n\r\t ':
+                while clean_quote and clean_quote[0] in '，,；;：:、。！？.!?\n\r\t –—':
                     clean_quote = clean_quote[1:]
                 # Muell-Inhalt mit Fragenummern herausfiltern (Frage 1-9)
                 skip = False
@@ -325,14 +326,18 @@ class AgentInterview:
                 if skip:
                     continue
                 # Zu langen Inhalt abschneiden (am Satzzeichen, nicht hart abschneiden)
-                if len(clean_quote) > 150:
-                    dot_pos = clean_quote.find('.', 80)
+                if len(clean_quote) > 200:
+                    dot_pos = clean_quote.find('.', 100)
                     if dot_pos <= 0:
-                        dot_pos = clean_quote.find('\u3002', 80)
+                        dot_pos = clean_quote.find('!', 100)
+                    if dot_pos <= 0:
+                        dot_pos = clean_quote.find('?', 100)
+                    if dot_pos <= 0:
+                        dot_pos = clean_quote.find('\u3002', 100)
                     if dot_pos > 0:
                         clean_quote = clean_quote[:dot_pos + 1]
                     else:
-                        clean_quote = clean_quote[:147] + "..."
+                        clean_quote = clean_quote[:197] + "..."
                 if clean_quote and len(clean_quote) >= 10:
                     text += f'> "{clean_quote}"\n'
         return text
@@ -1436,19 +1441,19 @@ Geben Sie die Teilfragenliste im JSON-Format zurück."""
                 sentences = re.split(r'[.!?。！？]', clean_text)
                 meaningful = [
                     s.strip() for s in sentences
-                    if 20 <= len(s.strip()) <= 150
+                    if 20 <= len(s.strip()) <= 200
                     and not re.match(r'^[\s\W，,；;：:、]+', s.strip())
                     and not s.strip().startswith(('{', 'Frage'))
                 ]
                 meaningful.sort(key=len, reverse=True)
                 key_quotes = [s + "." for s in meaningful[:3]]
 
-                # Strategie 2 (Ergaenzend): Langer Text in korrekt gepaarten chinesischen Anfuehrungszeichen
+                # Strategie 2 (Ergaenzend): Langer Text in korrekt gepaarten Anfuehrungszeichen (DE/CN)
                 if not key_quotes:
-                    paired = re.findall(r'\u201c([^\u201c\u201d]{15,100})\u201d', clean_text)
-                    paired += re.findall(r'\u300c([^\u300c\u300d]{15,100})\u300d', clean_text)
-                    paired += re.findall(r'\u201e([^\u201e\u201c]{15,100})\u201c', clean_text)
-                    paired += re.findall(r'\u00bb([^\u00bb\u00ab]{15,100})\u00ab', clean_text)
+                    paired = re.findall(r'\u201c([^\u201c\u201d]{15,200})\u201d', clean_text)
+                    paired += re.findall(r'\u300c([^\u300c\u300d]{15,200})\u300d', clean_text)
+                    paired += re.findall(r'\u201e([^\u201e\u201c]{15,200})\u201c', clean_text)
+                    paired += re.findall(r'\u00bb([^\u00bb\u00ab]{15,200})\u00ab', clean_text)
                     key_quotes = [q for q in paired if not re.match(r'^[，,；;：:、]', q)][:3]
                 
                 interview = AgentInterview(
