@@ -1322,7 +1322,7 @@ class ReportAgent:
             # Einmal parsen, Ergebnis wiederverwenden
             tool_calls = self._parse_tool_calls(response)
             has_tool_calls = bool(tool_calls)
-            has_final_answer = "Final Answer:" in response
+            has_final_answer = "Final Answer:" in response or "Endgültige Antwort:" in response or "Endgueltige Antwort:" in response
 
             # ── Konfliktbehandlung: LLM hat gleichzeitig Werkzeugaufruf und Final Answer ausgegeben ──
             if has_tool_calls and has_final_answer:
@@ -1389,7 +1389,12 @@ class ReportAgent:
                     continue
 
                 # Normaler Abschluss
-                final_answer = response.split("Final Answer:")[-1].strip()
+                for marker in ("Final Answer:", "Endgültige Antwort:", "Endgueltige Antwort:"):
+                    if marker in response:
+                        final_answer = response.split(marker)[-1].strip()
+                        break
+                else:
+                    final_answer = response.strip()
                 logger.info(f"Kapitel {section.title} Generierung abgeschlossen (Werkzeugaufrufe: {tool_calls_count})")
 
                 if self.report_logger:
@@ -1513,10 +1518,12 @@ class ReportAgent:
         if response is None:
             logger.error(f"Kapitel {section.title}: LLM gab bei erzwungenem Abschluss None zurueck, verwende Standard-Fehlermeldung")
             final_answer = f"(Dieser Abschnitt konnte nicht generiert werden: LLM hat leere Antwort zurueckgegeben, bitte spaeter erneut versuchen)"
-        elif "Final Answer:" in response:
-            final_answer = response.split("Final Answer:")[-1].strip()
         else:
             final_answer = response
+            for marker in ("Final Answer:", "Endgültige Antwort:", "Endgueltige Antwort:"):
+                if marker in response:
+                    final_answer = response.split(marker)[-1].strip()
+                    break
         
         # Protokolleintrag fuer Abschnittsinhalts-Generierungsabschluss
         if self.report_logger:

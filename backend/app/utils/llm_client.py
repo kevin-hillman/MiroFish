@@ -29,7 +29,8 @@ class LLMClient:
 
         self.client = OpenAI(
             api_key=self.api_key,
-            base_url=self.base_url
+            base_url=self.base_url,
+            timeout=120.0
         )
 
     def chat(
