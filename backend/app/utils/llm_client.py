@@ -64,6 +64,15 @@ class LLMClient:
 
         response = self.client.chat.completions.create(**kwargs)
         content = response.choices[0].message.content
+        # Reasoning-Modelle (z.B. MiniMax M2.7) geben content=None zurueck,
+        # wenn die Antwort nur im reasoning-Feld steht
+        if content is None:
+            msg = response.choices[0].message
+            reasoning = getattr(msg, 'reasoning', None) or getattr(msg, 'reasoning_content', None)
+            if reasoning:
+                content = reasoning if isinstance(reasoning, str) else str(reasoning)
+            else:
+                content = ""
         # Einige Modelle (z.B. MiniMax M2.5) fuegen <think>-Denkinhalt in content ein, der entfernt werden muss
         content = re.sub(r'<think>[\s\S]*?</think>', '', content).strip()
         return content
