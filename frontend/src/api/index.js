@@ -3,7 +3,7 @@ import { useAuth } from '../auth/supabase'
 
 // Axios-Instanz erstellen
 const service = axios.create({
-  baseURL: import.meta.env.VITE_API_BASE_URL || 'http://localhost:5001',
+  baseURL: import.meta.env.VITE_API_BASE_URL || '',
   timeout: 300000, // 5 Minuten Timeout (Ontologie-Generierung kann laenger dauern)
   headers: {
     'Content-Type': 'application/json'
