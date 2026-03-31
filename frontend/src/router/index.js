@@ -1,4 +1,5 @@
 import { createRouter, createWebHistory } from 'vue-router'
+import { useAuth } from '../auth/supabase'
 import Home from '../views/Home.vue'
 import Process from '../views/MainView.vue'
 import SimulationView from '../views/SimulationView.vue'
@@ -11,6 +12,11 @@ const routes = [
     path: '/',
     name: 'Home',
     component: Home
+  },
+  {
+    path: '/login',
+    name: 'Login',
+    component: () => import('../views/Login.vue')
   },
   {
     path: '/process/:projectId',
@@ -47,6 +53,22 @@ const routes = [
 const router = createRouter({
   history: createWebHistory(),
   routes
+})
+
+router.beforeEach((to, from, next) => {
+  const { isAuthenticated, authEnabled, loading } = useAuth()
+
+  if (to.name === 'Login') {
+    next()
+    return
+  }
+
+  if (authEnabled.value && !isAuthenticated.value && !loading.value) {
+    next({ name: 'Login' })
+    return
+  }
+
+  next()
 })
 
 export default router

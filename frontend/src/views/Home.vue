@@ -4,6 +4,10 @@
     <nav class="navbar">
       <div class="nav-brand">MIROFISH</div>
       <div class="nav-links">
+        <div v-if="authEnabled && user" class="nav-user">
+          <span class="user-email">{{ user.email }}</span>
+          <button class="logout-btn" @click="handleSignOut">Abmelden</button>
+        </div>
         <a href="https://github.com/666ghj/MiroFish" target="_blank" class="github-link">
           Besuche unsere Github-Seite <span class="arrow">↗</span>
         </a>
@@ -210,8 +214,15 @@
 import { ref, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import HistoryDatabase from '../components/HistoryDatabase.vue'
+import { useAuth } from '../auth/supabase'
 
 const router = useRouter()
+const { user, authEnabled, signOut } = useAuth()
+
+const handleSignOut = async () => {
+  await signOut()
+  router.push({ name: 'Login' })
+}
 
 // Formulardaten
 const formData = ref({
@@ -351,6 +362,35 @@ const startSimulation = () => {
 .nav-links {
   display: flex;
   align-items: center;
+  gap: 20px;
+}
+
+.nav-user {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.user-email {
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+  color: #999;
+}
+
+.logout-btn {
+  background: transparent;
+  border: 1px solid #555;
+  color: var(--white);
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  padding: 4px 12px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.logout-btn:hover {
+  border-color: var(--orange);
+  color: var(--orange);
 }
 
 .github-link {

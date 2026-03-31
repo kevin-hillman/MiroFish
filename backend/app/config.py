@@ -58,6 +58,12 @@ class Config:
         'TREND', 'REFRESH', 'DO_NOTHING', 'FOLLOW', 'MUTE'
     ]
 
+    # Authentifizierung (Supabase)
+    SUPABASE_URL = os.environ.get('SUPABASE_URL', '')
+    SUPABASE_ANON_KEY = os.environ.get('SUPABASE_ANON_KEY', '')
+    SUPABASE_JWT_SECRET = os.environ.get('SUPABASE_JWT_SECRET', '')
+    AUTH_ENABLED = os.environ.get('AUTH_ENABLED', 'false').lower() == 'true'
+
     # Report-Agent-Konfiguration
     REPORT_AGENT_MAX_TOOL_CALLS = int(os.environ.get('REPORT_AGENT_MAX_TOOL_CALLS', '5'))
     REPORT_AGENT_MAX_REFLECTION_ROUNDS = int(os.environ.get('REPORT_AGENT_MAX_REFLECTION_ROUNDS', '2'))

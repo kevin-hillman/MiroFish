@@ -29,6 +29,10 @@ dependencies = [
     "charset-normalizer>=3.0.0",
     "chardet>=5.0.0",
     
+    # Authentifizierung
+    "supabase>=2.0.0",
+    "PyJWT>=2.0.0",
+
     # Hilfsbibliotheken
     "python-dotenv>=1.0.0",
     "pydantic>=2.0.0",

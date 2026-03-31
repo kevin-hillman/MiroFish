@@ -1,0 +1,3 @@
+"""
+MiroFish Authentifizierung via Supabase
+"""

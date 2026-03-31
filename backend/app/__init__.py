@@ -9,7 +9,7 @@ import warnings
 # Muss vor allen anderen Imports gesetzt werden
 warnings.filterwarnings("ignore", message=".*resource_tracker.*")
 
-from flask import Flask, request
+from flask import Flask, request, jsonify, g
 from flask_cors import CORS
 
 from .config import Config
@@ -61,6 +61,45 @@ def create_app(config_class=Config):
         logger = get_logger('mirofish.request')
         logger.debug(f"Antwort: {response.status_code}")
         return response
+
+    # Auth-Blueprint registrieren
+    from .auth.routes import auth_bp
+    app.register_blueprint(auth_bp, url_prefix='/api/auth')
+
+    # Globale Auth-Middleware
+    @app.before_request
+    def check_auth():
+        # Auth fuer Gesundheitspruefung, Auth-Endpunkte, OPTIONS und statische Dateien ueberspringen
+        if request.path in ('/health',) or \
+           request.path.startswith('/api/auth/') or \
+           request.method == 'OPTIONS':
+            return None
+
+        if not Config.AUTH_ENABLED:
+            return None
+
+        import jwt
+        auth_header = request.headers.get('Authorization', '')
+        if not auth_header.startswith('Bearer '):
+            return jsonify({'success': False, 'error': 'Authentifizierung erforderlich'}), 401
+
+        token = auth_header.split('Bearer ')[1]
+        try:
+            payload = jwt.decode(
+                token,
+                Config.SUPABASE_JWT_SECRET,
+                algorithms=['HS256'],
+                audience='authenticated'
+            )
+            g.user = {
+                'id': payload.get('sub'),
+                'email': payload.get('email'),
+                'role': payload.get('role', 'authenticated')
+            }
+        except jwt.ExpiredSignatureError:
+            return jsonify({'success': False, 'error': 'Token abgelaufen'}), 401
+        except jwt.InvalidTokenError:
+            return jsonify({'success': False, 'error': 'Ungueltiger Token'}), 401
 
     # Blueprints registrieren
     from .api import graph_bp, simulation_bp, report_bp

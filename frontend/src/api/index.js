@@ -1,4 +1,5 @@
 import axios from 'axios'
+import { useAuth } from '../auth/supabase'
 
 // Axios-Instanz erstellen
 const service = axios.create({
@@ -12,6 +13,11 @@ const service = axios.create({
 // Anfrage-Interceptor
 service.interceptors.request.use(
   config => {
+    const { getToken } = useAuth()
+    const token = getToken()
+    if (token) {
+      config.headers['Authorization'] = `Bearer ${token}`
+    }
     return config
   },
   error => {
