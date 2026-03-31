@@ -55,7 +55,7 @@ const router = createRouter({
   routes
 })
 
-router.beforeEach((to, from, next) => {
+router.beforeEach(async (to, from, next) => {
   const { isAuthenticated, authEnabled, loading } = useAuth()
 
   if (to.name === 'Login') {
@@ -63,7 +63,19 @@ router.beforeEach((to, from, next) => {
     return
   }
 
-  if (authEnabled.value && !isAuthenticated.value && !loading.value) {
+  // Warten bis Auth geladen ist
+  if (loading.value) {
+    await new Promise(resolve => {
+      const check = setInterval(() => {
+        if (!loading.value) {
+          clearInterval(check)
+          resolve()
+        }
+      }, 50)
+    })
+  }
+
+  if (authEnabled.value && !isAuthenticated.value) {
     next({ name: 'Login' })
     return
   }
