@@ -1,0 +1,15 @@
+# Lokales Dev-Setup (autark, ohne Traefik/Coolify/imp).
+# Start:  docker compose -f docker-compose.local.yml up -d --build
+# UI:     http://localhost:3000
+services:
+  mirofish:
+    build: .
+    container_name: mirofish-local
+    env_file:
+      - .env
+    restart: "no"
+    ports:
+      - "3000:3000"   # Frontend (Vite)
+      - "5001:5001"   # Backend (Flask)
+    volumes:
+      - ./_local-data:/app/backend/uploads
