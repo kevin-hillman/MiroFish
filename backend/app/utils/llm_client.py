@@ -62,6 +62,11 @@ class LLMClient:
         if response_format:
             kwargs["response_format"] = response_format
 
+        # Reasoning-Effort fuer Reasoning-Modelle (z.B. DeepSeek V4 Pro via OpenRouter):
+        # per LLM_REASONING_EFFORT in .env steuerbar; leer = kein reasoning-Parameter
+        if Config.LLM_REASONING_EFFORT:
+            kwargs["extra_body"] = {"reasoning": {"effort": Config.LLM_REASONING_EFFORT}}
+
         response = self.client.chat.completions.create(**kwargs)
         content = response.choices[0].message.content
         # Reasoning-Modelle (z.B. MiniMax M2.7) geben content=None zurueck,
