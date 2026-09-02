@@ -16,24 +16,24 @@
 
     <div class="main-content">
       <!-- Oberer Bereich: Hero-Bereich -->
-      <section class=”hero-section”>
-        <div class=”hero-left”>
-          <div class=”tag-row”>
-            <span class=”orange-tag”>Einfache und universelle Schwarmintelligenz-Engine</span>
-            <span class=”version-text”>/ v0.1-Vorschau</span>
+      <section class="hero-section">
+        <div class="hero-left">
+          <div class="tag-row">
+            <span class="orange-tag">Einfache und universelle Schwarmintelligenz-Engine</span>
+            <span class="version-text">/ v0.1-Vorschau</span>
           </div>
 
-          <h1 class=”main-title”>
+          <h1 class="main-title">
             Beliebige Berichte hochladen<br>
-            <span class=”gradient-text”>Die Zukunft sofort simulieren</span>
+            <span class="gradient-text">Die Zukunft sofort simulieren</span>
           </h1>
 
-          <div class=”hero-desc”>
+          <div class="hero-desc">
             <p>
-              Selbst mit nur einem Textabschnitt kann <span class=”highlight-bold”>MiroFish</span> basierend auf den darin enthaltenen Realwelt-Samen automatisch eine Parallelwelt mit bis zu <span class=”highlight-orange”>Millionen von Agenten</span> erzeugen. Durch das Einsetzen von Variablen aus der Vogelperspektive wird in komplexen Gruppeninteraktionen nach dem <span class=”highlight-code”>”lokalen Optimum”</span> in dynamischen Umgebungen gesucht.
+              Selbst mit nur einem Textabschnitt kann <span class="highlight-bold">MiroFish</span> basierend auf den darin enthaltenen Realwelt-Samen automatisch eine Parallelwelt mit bis zu <span class="highlight-orange">Millionen von Agenten</span> erzeugen. Durch das Einsetzen von Variablen aus der Vogelperspektive wird in komplexen Gruppeninteraktionen nach dem <span class="highlight-code">”lokalen Optimum”</span> in dynamischen Umgebungen gesucht.
             </p>
-            <p class=”slogan-text”>
-              Lass die Zukunft im Agenten-Schwarm proben, lass Entscheidungen nach hundert Schlachten siegen<span class=”blinking-cursor”>_</span>
+            <p class="slogan-text">
+              Lass die Zukunft im Agenten-Schwarm proben, lass Entscheidungen nach hundert Schlachten siegen<span class="blinking-cursor">_</span>
             </p>
           </div>
            

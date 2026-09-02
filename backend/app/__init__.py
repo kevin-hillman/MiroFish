@@ -4,12 +4,13 @@ MiroFish Backend - Flask-Anwendungsfabrik
 
 import os
 import warnings
+from pathlib import Path
 
 # Warnungen von multiprocessing resource_tracker unterdruecken (aus Drittanbieter-Bibliotheken wie transformers)
 # Muss vor allen anderen Imports gesetzt werden
 warnings.filterwarnings("ignore", message=".*resource_tracker.*")
 
-from flask import Flask, request, jsonify, g
+from flask import Flask, abort, g, jsonify, request, send_from_directory
 from flask_cors import CORS
 
 from .config import Config
@@ -20,6 +21,10 @@ def create_app(config_class=Config):
     """Flask-Anwendungsfabrikfunktion"""
     app = Flask(__name__)
     app.config.from_object(config_class)
+    app.config.setdefault(
+        'FRONTEND_DIST',
+        str(Path(__file__).resolve().parents[2] / 'frontend' / 'dist')
+    )
 
     # JSON-Kodierung einrichten: Sicherstellen, dass CJK-Zeichen direkt angezeigt werden (statt \uXXXX-Format)
     # Flask >= 2.3 verwendet app.json.ensure_ascii, aeltere Versionen verwenden JSON_AS_ASCII-Konfiguration
@@ -69,8 +74,8 @@ def create_app(config_class=Config):
     # Globale Auth-Middleware
     @app.before_request
     def check_auth():
-        # Auth fuer Gesundheitspruefung, Auth-Endpunkte, OPTIONS und statische Dateien ueberspringen
-        if request.path in ('/health',) or \
+        # Auth nur fuer API-Endpunkte anwenden; Frontend und Gesundheitspruefung bleiben oeffentlich
+        if not request.path.startswith('/api/') or \
            request.path.startswith('/api/auth/') or \
            request.method == 'OPTIONS':
             return None
@@ -111,6 +116,20 @@ def create_app(config_class=Config):
     @app.route('/health')
     def health():
         return {'status': 'ok', 'service': 'MiroFish Backend'}
+
+    # Gebautes Vue-Frontend und SPA-Routen ausliefern
+    @app.route('/')
+    @app.route('/<path:path>')
+    def serve_frontend(path=''):
+        if path.startswith('api/'):
+            abort(404)
+
+        frontend_dist = Path(app.config['FRONTEND_DIST'])
+        requested_file = frontend_dist / path
+        if path and requested_file.is_file():
+            return send_from_directory(frontend_dist, path)
+
+        return send_from_directory(frontend_dist, 'index.html')
 
     if should_log_startup:
         logger.info("MiroFish Backend erfolgreich gestartet")
