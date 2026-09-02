@@ -458,7 +458,7 @@ const startSimulation = () => {
 }
 
 .main-title {
-  font-size: 4.5rem;
+  font-size: 2.5em;
   line-height: 1.2;
   font-weight: 500;
   margin: 0 0 40px 0;
