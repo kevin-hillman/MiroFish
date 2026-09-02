@@ -3,7 +3,7 @@
     <!-- Kopfzeile -->
     <header class="app-header">
       <div class="header-left">
-        <div class="brand" @click="router.push('/')">MIROFISH</div>
+        <RouterLink to="/" class="brand">MIROFISH</RouterLink>
       </div>
 
       <div class="header-center">
@@ -63,7 +63,7 @@
 
 <script setup>
 import { ref, computed, onMounted, watch } from 'vue'
-import { useRoute, useRouter } from 'vue-router'
+import { RouterLink, useRoute } from 'vue-router'
 import GraphPanel from '../components/GraphPanel.vue'
 import Step4Report from '../components/Step4Report.vue'
 import { getProject, getGraphData } from '../api/graph'
@@ -71,7 +71,6 @@ import { getSimulation } from '../api/simulation'
 import { getReport } from '../api/report'
 
 const route = useRoute()
-const router = useRouter()
 
 // Eigenschaften
 const props = defineProps({
@@ -246,6 +245,8 @@ onMounted(() => {
   font-weight: 800;
   font-size: 18px;
   letter-spacing: 1px;
+  color: inherit;
+  text-decoration: none;
   cursor: pointer;
 }
 
