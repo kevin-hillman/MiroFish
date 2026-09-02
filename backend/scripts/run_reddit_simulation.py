@@ -49,6 +49,53 @@ else:
 
 import re
 
+from action_logger import PlatformActionLogger
+
+
+FILTERED_ACTIONS = {"refresh", "sign_up"}
+
+
+def fetch_new_actions_from_db(
+    db_path: str,
+    last_rowid: int,
+    agent_names: Dict[int, str],
+) -> tuple[List[Dict[str, Any]], int]:
+    """Seit dem letzten Lesevorgang tatsaechlich ausgefuehrte Aktionen laden."""
+    actions = []
+    new_last_rowid = last_rowid
+
+    with sqlite3.connect(db_path) as connection:
+        rows = connection.execute(
+            """
+            SELECT rowid, user_id, action, info
+            FROM trace
+            WHERE rowid > ?
+            ORDER BY rowid ASC
+            """,
+            (last_rowid,),
+        ).fetchall()
+
+    for rowid, user_id, action, info_json in rows:
+        new_last_rowid = rowid
+        if action in FILTERED_ACTIONS:
+            continue
+
+        try:
+            action_args = json.loads(info_json) if info_json else {}
+        except json.JSONDecodeError:
+            action_args = {}
+        if not isinstance(action_args, dict):
+            action_args = {}
+
+        actions.append({
+            "agent_id": user_id,
+            "agent_name": agent_names.get(user_id, f"Agent_{user_id}"),
+            "action_type": action.upper(),
+            "action_args": action_args,
+        })
+
+    return actions, new_last_rowid
+
 
 class UnicodeFormatter(logging.Formatter):
     """Benutzerdefinierter Formatter, der Unicode-Escape-Sequenzen in lesbare Zeichen umwandelt"""
@@ -583,6 +630,19 @@ class RedditSimulationRunner:
         
         await self.env.reset()
         print("Umgebungsinitialisierung abgeschlossen\n")
+
+        action_logger = PlatformActionLogger("reddit", self.simulation_dir)
+        action_logger.log_simulation_start(self.config)
+        agent_names = {
+            agent_config.get("agent_id"): agent_config.get(
+                "entity_name",
+                f"Agent_{agent_config.get('agent_id')}",
+            )
+            for agent_config in self.config.get("agent_configs", [])
+            if agent_config.get("agent_id") is not None
+        }
+        total_actions = 0
+        last_rowid = 0
         
         # IPC-Verarbeiter initialisieren
         self.ipc_handler = IPCHandler(self.simulation_dir, self.env, self.agent_graph)
@@ -591,6 +651,8 @@ class RedditSimulationRunner:
         # Initiale Ereignisse ausfuehren
         event_config = self.config.get("event_config", {})
         initial_posts = event_config.get("initial_posts", [])
+
+        action_logger.log_round_start(0, 0)
         
         if initial_posts:
             print(f"Initiale Ereignisse ausfuehren ({len(initial_posts)} initiale Beitraege)...")
@@ -618,6 +680,22 @@ class RedditSimulationRunner:
             if initial_actions:
                 await self.env.step(initial_actions)
                 print(f"  Veroeffentlicht: {len(initial_actions)} initiale Beitraege")
+
+        initial_actions, last_rowid = fetch_new_actions_from_db(
+            db_path,
+            last_rowid,
+            agent_names,
+        )
+        for action_data in initial_actions:
+            action_logger.log_action(
+                round_num=0,
+                agent_id=action_data["agent_id"],
+                agent_name=action_data["agent_name"],
+                action_type=action_data["action_type"],
+                action_args=action_data["action_args"],
+            )
+        total_actions += len(initial_actions)
+        action_logger.log_round_end(0, len(initial_actions))
         
         # Hauptsimulationsschleife
         print("\nSimulationsschleife wird gestartet...")
@@ -631,8 +709,11 @@ class RedditSimulationRunner:
             active_agents = self._get_active_agents_for_round(
                 self.env, simulated_hour, round_num
             )
+
+            action_logger.log_round_start(round_num + 1, simulated_hour)
             
             if not active_agents:
+                action_logger.log_round_end(round_num + 1, 0)
                 continue
             
             actions = {
@@ -641,6 +722,22 @@ class RedditSimulationRunner:
             }
             
             await self.env.step(actions)
+
+            round_actions, last_rowid = fetch_new_actions_from_db(
+                db_path,
+                last_rowid,
+                agent_names,
+            )
+            for action_data in round_actions:
+                action_logger.log_action(
+                    round_num=round_num + 1,
+                    agent_id=action_data["agent_id"],
+                    agent_name=action_data["agent_name"],
+                    action_type=action_data["action_type"],
+                    action_args=action_data["action_args"],
+                )
+            total_actions += len(round_actions)
+            action_logger.log_round_end(round_num + 1, len(round_actions))
             
             if (round_num + 1) % 10 == 0 or round_num == 0:
                 elapsed = (datetime.now() - start_time).total_seconds()
@@ -654,6 +751,8 @@ class RedditSimulationRunner:
         print(f"\nSimulationsschleife abgeschlossen!")
         print(f"  - Gesamtzeit: {total_elapsed:.1f}Sekunden")
         print(f"  - Datenbank: {db_path}")
+
+        action_logger.log_simulation_end(total_rounds, total_actions)
         
         # Ob Befehlswartungsmodus betreten werden soll
         if self.wait_for_commands:
@@ -766,4 +865,3 @@ if __name__ == "__main__":
         pass
     finally:
         print("Simulationsprozess beendet")
-
