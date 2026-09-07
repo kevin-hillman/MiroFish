@@ -62,7 +62,7 @@ def test_ready_simulation_is_not_misreported_as_running_or_completed(simulation_
 
 @pytest.mark.parametrize('endpoint', ['/api/simulation/sim_status_test', '/api/simulation/list', '/api/simulation/history'])
 @pytest.mark.parametrize('metadata_status', [SimulationStatus.CREATED, SimulationStatus.PREPARING, SimulationStatus.READY, SimulationStatus.FAILED])
-@pytest.mark.parametrize('old_runner_status', [RunnerStatus.COMPLETED, RunnerStatus.FAILED])
+@pytest.mark.parametrize('old_runner_status', [RunnerStatus.COMPLETED, RunnerStatus.FAILED, RunnerStatus.STOPPED])
 def test_previous_runner_does_not_override_a_new_preparation(simulation_client, endpoint, metadata_status, old_runner_status):
     client, folder, manager, state = simulation_client
     state.status = metadata_status
@@ -71,6 +71,7 @@ def test_previous_runner_does_not_override_a_new_preparation(simulation_client, 
     SimulationRunner._save_run_state(SimulationRunState(
         simulation_id=state.simulation_id, runner_status=old_runner_status,
         current_round=4, total_rounds=4, error='Alter Lauf fehlgeschlagen',
+        twitter_completed=True, reddit_completed=True, twitter_current_round=4, reddit_current_round=4,
     ))
     before = {path.name: path.read_bytes() for path in folder.iterdir() if path.is_file()}
     response = client.get(endpoint)
@@ -80,3 +81,86 @@ def test_previous_runner_does_not_override_a_new_preparation(simulation_client, 
     assert item['status'] == metadata_status.value
     assert item['error'] == state.error
     assert {path.name: path.read_bytes() for path in folder.iterdir() if path.is_file()} == before
+
+
+@pytest.mark.parametrize('endpoint', ['/api/simulation/sim_status_test', '/api/simulation/list', '/api/simulation/history'])
+@pytest.mark.parametrize('twitter_enabled,reddit_enabled,twitter_done,reddit_done,expected', [
+    (False, True, False, True, 'completed'),
+    (True, False, True, False, 'completed'),
+    (True, True, True, True, 'completed'),
+    (True, True, False, True, 'stopped'),
+    (False, True, False, False, 'stopped'),
+    (False, False, True, True, 'stopped'),
+    (True, False, False, True, 'stopped'),
+])
+def test_finished_rounds_remain_completed_after_interaction_process_shutdown(
+    simulation_client, endpoint, twitter_enabled, reddit_enabled, twitter_done, reddit_done, expected,
+):
+    client, folder, manager, state = simulation_client
+    state.status = SimulationStatus.STOPPED
+    state.enable_twitter = twitter_enabled
+    state.enable_reddit = reddit_enabled
+    manager._save_simulation_state(state)
+    shutdown_reason = 'Server heruntergefahren, Simulation wurde beendet'
+    SimulationRunner._save_run_state(SimulationRunState(
+        simulation_id=state.simulation_id, runner_status=RunnerStatus.STOPPED,
+        current_round=4, total_rounds=4, twitter_completed=twitter_done, reddit_completed=reddit_done,
+        twitter_current_round=4, reddit_current_round=4,
+        error=shutdown_reason,
+    ))
+    before = {path.name: path.read_bytes() for path in folder.iterdir() if path.is_file()}
+    response = client.get(endpoint)
+    assert response.status_code == 200
+    data = response.get_json()['data']
+    item = data[0] if isinstance(data, list) else data
+    assert item['status'] == expected
+    assert item['runner_status'] == 'stopped'
+    if expected == 'completed':
+        assert item['error'] is None
+        assert item['runner_error'] == shutdown_reason
+    else:
+        assert item['error'] == shutdown_reason
+    assert {path.name: path.read_bytes() for path in folder.iterdir() if path.is_file()} == before
+
+
+@pytest.mark.parametrize('endpoint', ['/api/simulation/sim_status_test', '/api/simulation/list', '/api/simulation/history'])
+@pytest.mark.parametrize('twitter_round,reddit_round,total_rounds', [(4, 3, 4), (3, 4, 4), (0, 0, 4), (4, 4, 0)])
+def test_shutdown_completion_events_do_not_prove_all_rounds_finished(
+    simulation_client, endpoint, twitter_round, reddit_round, total_rounds,
+):
+    client, folder, manager, state = simulation_client
+    state.status = SimulationStatus.STOPPED
+    state.enable_twitter = True
+    state.enable_reddit = True
+    manager._save_simulation_state(state)
+    SimulationRunner._save_run_state(SimulationRunState(
+        simulation_id=state.simulation_id, runner_status=RunnerStatus.STOPPED,
+        current_round=4, total_rounds=total_rounds, twitter_completed=True, reddit_completed=True,
+        twitter_current_round=twitter_round, reddit_current_round=reddit_round, error='Lauf vorzeitig beendet',
+    ))
+    before = {path.name: path.read_bytes() for path in folder.iterdir() if path.is_file()}
+    response = client.get(endpoint)
+    assert response.status_code == 200
+    data = response.get_json()['data']
+    item = data[0] if isinstance(data, list) else data
+    assert item['status'] == 'stopped'
+    assert item['runner_status'] == 'stopped'
+    assert item['error'] == 'Lauf vorzeitig beendet'
+    assert {path.name: path.read_bytes() for path in folder.iterdir() if path.is_file()} == before
+
+
+@pytest.mark.parametrize('endpoint', ['/api/simulation/sim_status_test', '/api/simulation/list', '/api/simulation/history'])
+def test_failed_runner_is_not_hidden_by_completed_rounds(simulation_client, endpoint):
+    client, _, _, state = simulation_client
+    SimulationRunner._save_run_state(SimulationRunState(
+        simulation_id=state.simulation_id, runner_status=RunnerStatus.FAILED,
+        current_round=4, total_rounds=4, twitter_completed=True, reddit_completed=True,
+        twitter_current_round=4, reddit_current_round=4, error='Lauf fehlgeschlagen',
+    ))
+    response = client.get(endpoint)
+    assert response.status_code == 200
+    data = response.get_json()['data']
+    item = data[0] if isinstance(data, list) else data
+    assert item['status'] == 'failed'
+    assert item['runner_status'] == 'failed'
+    assert item['error'] == 'Lauf fehlgeschlagen'

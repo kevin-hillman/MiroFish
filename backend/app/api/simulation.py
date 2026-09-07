@@ -751,6 +751,7 @@ def _simulation_readback(state, run_state):
     """Aktuellen Laufstatus ausgeben, ohne archivierte Eingaben umzuschreiben."""
     result = state.to_dict()
     result['runner_status'] = run_state.runner_status.value if run_state else 'idle'
+    result['runner_error'] = run_state.error if run_state else None
     if not run_state or state.status not in (
         SimulationStatus.RUNNING, SimulationStatus.PAUSED,
         SimulationStatus.STOPPED, SimulationStatus.COMPLETED,
@@ -770,6 +771,23 @@ def _simulation_readback(state, run_state):
         result['status'] = status_map[run_state.runner_status].value
         result['current_round'] = run_state.current_round
         result['error'] = run_state.error
+
+    # Nach abgeschlossenen Runden kann die Interaktionsumgebung noch laufen.
+    # Ihr spaeteres Beenden macht das Simulationsergebnis nicht unvollstaendig.
+    # simulation_end allein reicht nicht: Auch ein frueher Stopp erzeugt es.
+    completed_platforms = []
+    if state.enable_twitter:
+        completed_platforms.append(run_state.twitter_completed and run_state.twitter_current_round >= run_state.total_rounds)
+    if state.enable_reddit:
+        completed_platforms.append(run_state.reddit_completed and run_state.reddit_current_round >= run_state.total_rounds)
+    if (
+        run_state.runner_status == RunnerStatus.STOPPED
+        and run_state.total_rounds > 0
+        and completed_platforms
+        and all(completed_platforms)
+    ):
+        result['status'] = SimulationStatus.COMPLETED.value
+        result['error'] = None
     return result
 
 
