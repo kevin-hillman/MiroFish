@@ -1871,15 +1871,163 @@ const truncateText = (text, maxLen) => {
   return text.substring(0, maxLen) + '...'
 }
 
+const escapeHtml = (value) => String(value)
+  .replace(/&/g, '&amp;')
+  .replace(/</g, '&lt;')
+  .replace(/>/g, '&gt;')
+  .replace(/"/g, '&quot;')
+  .replace(/'/g, '&#39;')
+
+const isEscaped = (value, index) => {
+  let backslashes = 0
+  for (let i = index - 1; i >= 0 && value[i] === '\\'; i--) {
+    backslashes++
+  }
+  return backslashes % 2 === 1
+}
+
+const splitTableRow = (line) => {
+  if (/^(?: {4,}|\t)/.test(line)) return null
+  const value = line.trim()
+  if (!value || !value.includes('|')) return null
+
+  const startsWithPipe = value.startsWith('|')
+  const endsWithPipe = value.endsWith('|') && !isEscaped(value, value.length - 1)
+  const cells = []
+  let cell = ''
+  let codeDelimiterLength = 0
+  let hasDelimiter = false
+
+  for (let i = 0; i < value.length; i++) {
+    const character = value[i]
+
+    if (character === '`') {
+      let delimiterLength = 1
+      while (value[i + delimiterLength] === '`') delimiterLength++
+      if (codeDelimiterLength === 0) {
+        codeDelimiterLength = delimiterLength
+      } else if (codeDelimiterLength === delimiterLength) {
+        codeDelimiterLength = 0
+      }
+      cell += '`'.repeat(delimiterLength)
+      i += delimiterLength - 1
+      continue
+    }
+
+    if (character === '\\' && value[i + 1] === '|') {
+      cell += '\\|'
+      i++
+      continue
+    }
+
+    if (character === '|' && codeDelimiterLength === 0) {
+      hasDelimiter = true
+      cells.push(cell.trim())
+      cell = ''
+      continue
+    }
+
+    cell += character
+  }
+  cells.push(cell.trim())
+
+  if (!hasDelimiter) return null
+  if (startsWithPipe) cells.shift()
+  if (endsWithPipe) cells.pop()
+  return cells
+}
+
+const isTableSeparator = (cell) => /^:?-{3,}:?$/.test(cell.trim())
+
+const renderTableCell = (value, inlineCodeBlocks) => {
+  let cell = escapeHtml(value.replace(/\\\|/g, '|'))
+
+  cell = cell.replace(/`([^`]+)`/g, (_, code) => {
+    const token = `\uE100TABLEINLINE${inlineCodeBlocks.length}\uE101`
+    inlineCodeBlocks.push(`<code class="inline-code">${code}</code>`)
+    return token
+  })
+  cell = cell.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+  cell = cell.replace(/\*(.+?)\*/g, '<em>$1</em>')
+  cell = cell.replace(/_(.+?)_/g, '<em>$1</em>')
+
+  return cell
+}
+
+const renderTable = (headerCells, bodyRows, inlineCodeBlocks) => {
+  const headers = headerCells
+    .map(cell => `<th scope="col">${renderTableCell(cell, inlineCodeBlocks)}</th>`)
+    .join('')
+  const rows = bodyRows
+    .map(row => `<tr>${row.map(cell => `<td>${renderTableCell(cell, inlineCodeBlocks)}</td>`).join('')}</tr>`)
+    .join('')
+
+  return `<div class="md-table-wrapper"><table class="md-table"><thead><tr>${headers}</tr></thead><tbody>${rows}</tbody></table></div>`
+}
+
+const renderTables = (content, inlineCodeBlocks) => {
+  const lines = content.split('\n')
+  const rendered = []
+
+  for (let index = 0; index < lines.length;) {
+    const headerCells = splitTableRow(lines[index])
+    const separatorCells = index + 1 < lines.length ? splitTableRow(lines[index + 1]) : null
+
+    if (
+      headerCells &&
+      separatorCells &&
+      headerCells.length === separatorCells.length &&
+      separatorCells.every(isTableSeparator)
+    ) {
+      const bodyRows = []
+      let nextIndex = index + 2
+      while (nextIndex < lines.length) {
+        const row = splitTableRow(lines[nextIndex])
+        if (!row || row.length !== headerCells.length) break
+        bodyRows.push(row)
+        nextIndex++
+      }
+
+      if (rendered.length > 0 && rendered[rendered.length - 1] !== '') rendered.push('')
+      rendered.push(renderTable(headerCells, bodyRows, inlineCodeBlocks))
+      if (nextIndex < lines.length && lines[nextIndex] !== '') rendered.push('')
+      index = nextIndex
+      continue
+    }
+
+    rendered.push(lines[index])
+    index++
+  }
+
+  return rendered.join('\n')
+}
+
 const renderMarkdown = (content) => {
   if (!content) return ''
   
   // 去掉开头的二级标题（## xxx），因为章节标题已在外层显示
   let processedContent = content.replace(/^##\s+.+\n+/, '')
-  
-  // 处理代码块
-  let html = processedContent.replace(/```(\w*)\n([\s\S]*?)```/g, '<pre class="code-block"><code>$2</code></pre>')
-  
+
+  // Code-Fences vor der Tabellenerkennung schuetzen, damit Pipes im Code keine
+  // Tabellenzeilen ausloesen. Die eigentliche Ausgabe bleibt unveraendert.
+  const codeBlocks = []
+  processedContent = processedContent.replace(/```(\w*)\n([\s\S]*?)```/g, (_, language, code) => {
+    const token = `\uE000CODE_BLOCK_${codeBlocks.length}\uE001`
+    codeBlocks.push({
+      token,
+      html: `<pre class="code-block"><code>${code}</code></pre>`
+    })
+    return token
+  })
+
+  const tableInlineCodeBlocks = []
+  processedContent = renderTables(processedContent, tableInlineCodeBlocks)
+  let html = processedContent
+
+  codeBlocks.forEach(({ token, html: codeBlock }) => {
+    html = html.replace(token, codeBlock)
+  })
+
   // 处理行内代码
   html = html.replace(/`([^`]+)`/g, '<code class="inline-code">$1</code>')
   
@@ -1935,17 +2083,20 @@ const renderMarkdown = (content) => {
   html = html.replace(/<p class="md-p"><\/p>/g, '')
   html = html.replace(/<p class="md-p">(<h[2-5])/g, '$1')
   html = html.replace(/(<\/h[2-5]>)<\/p>/g, '$1')
-  html = html.replace(/<p class="md-p">(<ul|<ol|<blockquote|<pre|<hr)/g, '$1')
+  html = html.replace(/<p class="md-p">(<ul|<ol|<blockquote|<pre|<hr|<div class="md-table-wrapper">)/g, '$1')
   html = html.replace(/(<\/ul>|<\/ol>|<\/blockquote>|<\/pre>)<\/p>/g, '$1')
+  html = html.replace(/(<div class="md-table-wrapper">[\s\S]*?<\/div>)(?:<br>)?<\/p>/g, '$1')
   // 清理块级元素前后的 <br> 标签
-  html = html.replace(/<br>\s*(<ul|<ol|<blockquote)/g, '$1')
+  html = html.replace(/<br>\s*(<ul|<ol|<blockquote|<div class="md-table-wrapper">)/g, '$1')
   html = html.replace(/(<\/ul>|<\/ol>|<\/blockquote>)\s*<br>/g, '$1')
+  html = html.replace(/(<div class="md-table-wrapper">[\s\S]*?<\/div>)\s*<br>/g, '$1')
   // 清理 <p><br> 紧跟块级元素的情况（多余空行导致）
-  html = html.replace(/<p class="md-p">(<br>\s*)+(<ul|<ol|<blockquote|<pre|<hr)/g, '$2')
+  html = html.replace(/<p class="md-p">(<br>\s*)+(<ul|<ol|<blockquote|<pre|<hr|<div class="md-table-wrapper">)/g, '$2')
   // 清理连续的 <br> 标签
   html = html.replace(/(<br>\s*){2,}/g, '<br>')
   // 清理块级元素后紧跟的段落开始标签前的 <br>
   html = html.replace(/(<\/ol>|<\/ul>|<\/blockquote>)<br>(<p|<div)/g, '$1$2')
+  html = html.replace(/(<div class="md-table-wrapper">[\s\S]*?<\/div>)<br>(<p|<div)/g, '$1$2')
 
   // 修复非连续有序列表的编号：当单项 <ol> 被段落内容隔开时，保持编号递增
   const tokens = html.split(/(<ol class="md-ol">(?:<li class="md-oli"[^>]*>[\s\S]*?<\/li>)+<\/ol>)/g)
@@ -1972,6 +2123,8 @@ const renderMarkdown = (content) => {
     }
   }
   html = tokens.join('')
+
+  html = html.replace(/\uE100TABLEINLINE(\d+)\uE101/g, (_, index) => tableInlineCodeBlocks[Number(index)])
 
   return html
 }
@@ -2543,6 +2696,32 @@ watch(() => props.reportId, restartReport, { immediate: true })
 
 .generated-content :deep(p) {
   margin-bottom: 1em;
+}
+
+.generated-content :deep(.md-table-wrapper) {
+  max-width: 100%;
+  overflow-x: auto;
+  margin: 1em 0;
+  -webkit-overflow-scrolling: touch;
+}
+
+.generated-content :deep(.md-table) {
+  width: 100%;
+  min-width: 560px;
+  border-collapse: collapse;
+}
+
+.generated-content :deep(.md-table th),
+.generated-content :deep(.md-table td) {
+  padding: 8px 12px;
+  border-bottom: 1px solid #E5E7EB;
+  text-align: left;
+  vertical-align: top;
+}
+
+.generated-content :deep(.md-table th) {
+  color: #111827;
+  font-weight: 600;
 }
 
 .generated-content :deep(.md-h2),

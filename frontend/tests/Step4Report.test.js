@@ -27,6 +27,18 @@ const savedReport = (overrides = {}) => ({
   ...overrides
 })
 
+const reportWithSectionContent = (content) => ({
+  report_id: 'report_table_fixture',
+  simulation_id: 'sim_table_fixture',
+  status: 'completed',
+  error: null,
+  outline: {
+    title: 'Synthetic report',
+    summary: 'Generic renderer fixture.',
+    sections: [{ title: 'Table section', content }]
+  }
+})
+
 const logResponse = (logs = [], fromLine = 0) => ({
   success: true,
   data: { logs, from_line: fromLine, total_lines: fromLine + logs.length, has_more: false }
@@ -211,5 +223,178 @@ describe('laufende und fehlgeschlagene Reports', () => {
     await flushPromises()
     expect(wrapper.find('h1').text()).toBe('Buybacklinks-Auswertung')
     expect(wrapper.findAll('.generated-content')).toHaveLength(3)
+  })
+})
+
+describe('Markdown-Tabellen im gespeicherten Report', () => {
+  it('rendert einen Vier-Spalten-Header mit sechs Datenzeilen semantisch', async () => {
+    const table = [
+      '| Segment | Score | Region | Status |',
+      '| --- | --- | --- | --- |',
+      '| Buyer 01 | 10 | Zone A | Ready |',
+      '| Buyer 02 | 20 | Zone B | Ready |',
+      '| Buyer 03 | 30 | Zone C | Ready |',
+      '| Buyer 04 | 40 | Zone D | Ready |',
+      '| Buyer 05 | 50 | Zone E | Ready |',
+      '| Buyer 06 | 60 | Zone F | Ready |'
+    ].join('\n')
+    getReport.mockResolvedValue({ success: true, data: reportWithSectionContent(table) })
+
+    await openReport('report_table_fixture')
+
+    const generated = wrapper.find('.generated-content')
+    const renderedTable = generated.find('table')
+    expect(renderedTable.exists()).toBe(true)
+    expect(renderedTable.findAll('thead tr')).toHaveLength(1)
+    expect(renderedTable.findAll('thead th')).toHaveLength(4)
+    renderedTable.findAll('thead th').forEach(header => {
+      expect(header.attributes('scope')).toBe('col')
+    })
+    expect(renderedTable.findAll('tbody tr')).toHaveLength(6)
+    expect(renderedTable.findAll('tbody td')).toHaveLength(24)
+  })
+
+  it('bewahrt Inlineformatierung und behandelt Escaped- und Code-Pipes als Zelltext', async () => {
+    const table = [
+      '| Name | Description | Snippet | Outcome |',
+      '| :--- | :---: | ---: | --- |',
+      '| **Bold** | _Italic_ | `x|y` | left \\| right |'
+    ].join('\n')
+    getReport.mockResolvedValue({ success: true, data: reportWithSectionContent(table) })
+
+    await openReport('report_table_fixture')
+
+    const cells = wrapper.findAll('.generated-content tbody td')
+    expect(cells).toHaveLength(4)
+    expect(cells[0].find('strong').text()).toBe('Bold')
+    expect(cells[1].find('em').text()).toBe('Italic')
+    expect(cells[2].find('code').text()).toBe('x|y')
+    expect(cells[3].text()).toBe('left | right')
+  })
+
+  it('haelt Tabelle, Absaetze und Liste als getrennte Blockelemente', async () => {
+    const content = [
+      'Before paragraph.',
+      '',
+      '| Name | Score | Region | Status |',
+      '| --- | --- | --- | --- |',
+      '| Buyer 01 | 10 | Zone A | Ready |',
+      '',
+      'After paragraph.',
+      '',
+      '- First item',
+      '- Second item'
+    ].join('\n')
+    getReport.mockResolvedValue({ success: true, data: reportWithSectionContent(content) })
+
+    await openReport('report_table_fixture')
+
+    const generated = wrapper.find('.generated-content').element
+    const children = Array.from(generated.children)
+    expect(children.map(child => child.tagName)).toEqual(['P', 'DIV', 'P', 'UL'])
+    expect(children[0].textContent).toBe('Before paragraph.')
+    expect(children[1].classList.contains('md-table-wrapper')).toBe(true)
+    expect(children[1].querySelector('table')).not.toBeNull()
+    expect(children[2].textContent).toBe('After paragraph.')
+    expect(generated.querySelector('p > table')).toBeNull()
+    expect(generated.querySelector('p > .md-table-wrapper')).toBeNull()
+    expect(generated.querySelector('br + .md-table-wrapper')).toBeNull()
+    expect(generated.querySelector('.md-table-wrapper + br')).toBeNull()
+    expect(children[3].querySelectorAll('li')).toHaveLength(2)
+  })
+
+  it('laesst eine tabellenaehnliche Struktur innerhalb eines Fenced Code Blocks als Code', async () => {
+    const code = [
+      '```text',
+      '| Name | Score |',
+      '| --- | --- |',
+      '| Buyer 01 | 10 |',
+      '```'
+    ].join('\n')
+    getReport.mockResolvedValue({ success: true, data: reportWithSectionContent(code) })
+
+    await openReport('report_table_fixture')
+
+    const generated = wrapper.find('.generated-content')
+    expect(generated.find('table').exists()).toBe(false)
+    expect(generated.find('pre.code-block').exists()).toBe(true)
+    expect(generated.find('pre.code-block code').text()).toContain('| Name | Score |')
+  })
+
+  it('escaped HTML in Tabellenzellen bleibt inert und wird als Text angezeigt', async () => {
+    const table = [
+      '| Name | Image markup | Script markup | Status |',
+      '| --- | --- | --- | --- |',
+      '| Buyer 01 | <img src="x" onerror="alert(1)"> | <script>alert(1)</script> | Ready |'
+    ].join('\n')
+    getReport.mockResolvedValue({ success: true, data: reportWithSectionContent(table) })
+
+    await openReport('report_table_fixture')
+
+    const cells = wrapper.findAll('.generated-content tbody td')
+    expect(cells).toHaveLength(4)
+    expect(cells[1].text()).toBe('<img src="x" onerror="alert(1)">')
+    expect(cells[2].text()).toBe('<script>alert(1)</script>')
+    expect(wrapper.find('.generated-content img').exists()).toBe(false)
+    expect(wrapper.find('.generated-content script').exists()).toBe(false)
+    expect(wrapper.find('.generated-content [onerror]').exists()).toBe(false)
+  })
+
+  it('erzeugt bei einem finalen Newline keinen leeren Absatz hinter der Tabelle', async () => {
+    const table = '| A | B |\n| --- | --- |\n| 1 | 2 |\n'
+    getReport.mockResolvedValue({ success: true, data: reportWithSectionContent(table) })
+
+    await openReport('report_table_fixture')
+
+    const generated = wrapper.find('.generated-content').element
+    expect(Array.from(generated.children).map(child => child.tagName)).toEqual(['DIV'])
+    expect(generated.querySelector('.md-table-wrapper + p')).toBeNull()
+  })
+
+  it.each([
+    ['vier Leerzeichen', '    '],
+    ['einen Tab', '\t']
+  ])('behandelt %s vor allen Tabellenzeilen weiterhin als Rohtext', async (_, indent) => {
+    const content = [
+      `${indent}| A | B |`,
+      `${indent}| --- | --- |`,
+      `${indent}| 1 | 2 |`
+    ].join('\n')
+    getReport.mockResolvedValue({ success: true, data: reportWithSectionContent(content) })
+
+    await openReport('report_table_fixture')
+
+    const generated = wrapper.find('.generated-content')
+    expect(generated.find('table').exists()).toBe(false)
+    expect(generated.text()).toContain('| A | B |')
+    expect(generated.text()).toContain('| --- | --- |')
+    expect(generated.text()).toContain('| 1 | 2 |')
+  })
+
+  it('bewahrt den bisherigen Abstand nach einem Fenced Code Block', async () => {
+    const content = '```js\ncode\n```\nAfter'
+    getReport.mockResolvedValue({ success: true, data: reportWithSectionContent(content) })
+
+    await openReport('report_table_fixture')
+
+    expect(wrapper.find('.generated-content').html()).toContain('</pre><br>After')
+  })
+
+  it('bewahrt wörtliche Unterstriche und Sternchen in Tabellen-Inline-Code', async () => {
+    const table = [
+      '| A | B |',
+      '| --- | --- |',
+      '| `a_b_c` | `*literal*` |'
+    ].join('\n')
+    getReport.mockResolvedValue({ success: true, data: reportWithSectionContent(table) })
+
+    await openReport('report_table_fixture')
+
+    const cells = wrapper.findAll('.generated-content tbody td')
+    expect(cells).toHaveLength(2)
+    expect(cells[0].find('code').text()).toBe('a_b_c')
+    expect(cells[0].find('code em').exists()).toBe(false)
+    expect(cells[1].find('code').text()).toBe('*literal*')
+    expect(cells[1].find('code em').exists()).toBe(false)
   })
 })
