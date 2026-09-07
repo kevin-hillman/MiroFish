@@ -4,6 +4,10 @@
     <div class="main-split-layout">
       <!-- LEFT PANEL: Report Style -->
       <div class="left-panel report-style" ref="leftPanel">
+        <div v-if="reportError" class="report-error" role="alert">
+          <p>{{ reportError }}</p>
+          <button type="button" @click="restartReport">Bericht erneut laden</button>
+        </div>
         <div v-if="reportOutline" class="report-content-wrapper">
           <!-- Report Header -->
           <div class="report-header-block">
@@ -66,7 +70,7 @@
         </div>
 
         <!-- Waiting State -->
-        <div v-if="!reportOutline" class="waiting-placeholder">
+        <div v-if="!reportOutline && !reportError" class="waiting-placeholder">
           <div class="waiting-animation">
             <div class="waiting-ring"></div>
             <div class="waiting-ring"></div>
@@ -390,9 +394,9 @@
 </template>
 
 <script setup>
-import { ref, computed, watch, onMounted, onUnmounted, nextTick, h, reactive } from 'vue'
+import { ref, computed, watch, onUnmounted, nextTick, h, reactive } from 'vue'
 import { useRouter } from 'vue-router'
-import { getAgentLog, getConsoleLog } from '../api/report'
+import { getReport, getAgentLog, getConsoleLog } from '../api/report'
 
 const router = useRouter()
 
@@ -423,6 +427,7 @@ const expandedContent = ref(new Set())
 const expandedLogs = ref(new Set())
 const collapsedSections = ref(new Set())
 const isComplete = ref(false)
+const reportError = ref('')
 const startTime = ref(null)
 const leftPanel = ref(null)
 const rightPanel = ref(null)
@@ -1700,12 +1705,14 @@ const QuickSearchDisplay = {
 
 // Computed
 const statusClass = computed(() => {
+  if (reportError.value) return 'error'
   if (isComplete.value) return 'completed'
   if (agentLogs.value.length > 0) return 'processing'
   return 'pending'
 })
 
 const statusText = computed(() => {
+  if (reportError.value) return 'Fehler'
   if (isComplete.value) return 'Completed'
   if (agentLogs.value.length > 0) return 'Generating...'
   return 'Waiting'
@@ -2010,15 +2017,17 @@ const getLogLevelClass = (log) => {
   return ''
 }
 
-// Polling
-let agentLogTimer = null
-let consoleLogTimer = null
+// Pro Report nur eine Abfragerunde. Antworten einer alten Route werden ignoriert.
+let pollTimer = null
+let loadVersion = 0
+const isCurrentRequest = (reportId, version) => version === loadVersion && reportId === props.reportId
 
-const fetchAgentLog = async () => {
-  if (!props.reportId) return
+const fetchAgentLog = async (reportId, version) => {
+  if (!isCurrentRequest(reportId, version)) return
   
   try {
-    const res = await getAgentLog(props.reportId, agentLogLine.value)
+    const res = await getAgentLog(reportId, agentLogLine.value)
+    if (!isCurrentRequest(reportId, version)) return
     
     if (res.success && res.data) {
       const newLogs = res.data.logs || []
@@ -2027,16 +2036,16 @@ const fetchAgentLog = async () => {
         newLogs.forEach(log => {
           agentLogs.value.push(log)
           
-          if (log.action === 'planning_complete' && log.details?.outline) {
+          if (!isComplete.value && log.action === 'planning_complete' && log.details?.outline) {
             reportOutline.value = log.details.outline
           }
           
-          if (log.action === 'section_start') {
+          if (!isComplete.value && log.action === 'section_start') {
             currentSectionIndex.value = log.section_index
           }
 
           // section_complete - 章节生成完成
-          if (log.action === 'section_complete') {
+          if (!isComplete.value && log.action === 'section_complete') {
             if (log.details?.content) {
               generatedSections.value[log.section_index] = log.details.content
               // 自动展开刚生成的章节
@@ -2045,13 +2054,8 @@ const fetchAgentLog = async () => {
             }
           }
           
-          if (log.action === 'report_complete') {
-            isComplete.value = true
-            currentSectionIndex.value = null  // 确保清除 loading 状态
-            emit('update-status', 'completed')
-            stopPolling()
-            // 滚动逻辑统一在循环结束后的 nextTick 中处理
-          }
+          // Der Abschluss wird aus dem gespeicherten Report gelesen, nicht aus
+          // dem Protokoll: report_complete kann vor save_report eintreffen.
           
           if (log.action === 'report_start') {
             startTime.value = new Date(log.timestamp)
@@ -2122,11 +2126,12 @@ const extractFinalContent = (response) => {
   return null
 }
 
-const fetchConsoleLog = async () => {
-  if (!props.reportId) return
+const fetchConsoleLog = async (reportId, version) => {
+  if (!isCurrentRequest(reportId, version)) return
   
   try {
-    const res = await getConsoleLog(props.reportId, consoleLogLine.value)
+    const res = await getConsoleLog(reportId, consoleLogLine.value)
+    if (!isCurrentRequest(reportId, version)) return
     
     if (res.success && res.data) {
       const newLogs = res.data.logs || []
@@ -2147,57 +2152,92 @@ const fetchConsoleLog = async () => {
   }
 }
 
-const startPolling = () => {
-  if (agentLogTimer || consoleLogTimer) return
-  
-  fetchAgentLog()
-  fetchConsoleLog()
-  
-  agentLogTimer = setInterval(fetchAgentLog, 2000)
-  consoleLogTimer = setInterval(fetchConsoleLog, 1500)
-}
-
 const stopPolling = () => {
-  if (agentLogTimer) {
-    clearInterval(agentLogTimer)
-    agentLogTimer = null
-  }
-  if (consoleLogTimer) {
-    clearInterval(consoleLogTimer)
-    consoleLogTimer = null
+  if (pollTimer !== null) {
+    clearTimeout(pollTimer)
+    pollTimer = null
   }
 }
 
-// Lifecycle
-onMounted(() => {
-  if (props.reportId) {
-    addLog(`Report Agent initialized: ${props.reportId}`)
-    startPolling()
+const refreshReport = async (reportId, version, failedReads = 0) => {
+  if (!isCurrentRequest(reportId, version)) return
+  pollTimer = null
+  try {
+    const res = await getReport(reportId)
+    if (!isCurrentRequest(reportId, version)) return
+    if (!res.success || !res.data || res.data.report_id !== reportId) {
+      throw new Error(res.error || 'Bericht konnte nicht geladen werden.')
+    }
+
+    const report = res.data
+    reportOutline.value = report.outline || null
+    reportError.value = report.status === 'failed'
+      ? (report.error || 'Berichterstellung fehlgeschlagen.')
+      : ''
+    isComplete.value = report.status === 'completed'
+
+    if (isComplete.value) {
+      // Gespeicherter Text bleibt massgeblich; alte Diagnoseereignisse duerfen
+      // weder Kapitel ersetzen noch eine neue Generierung vortaeuschen.
+      generatedSections.value = Object.fromEntries(
+        (report.outline?.sections || []).map((section, index) => [index + 1, section.content])
+      )
+      currentSectionIndex.value = null
+    }
+    emit('update-status', reportError.value ? 'error' : (isComplete.value ? 'completed' : 'processing'))
+
+    // Protokolle sind Zusatzinformationen. Ihr Fehlen blockiert fertige Texte nicht.
+    await Promise.all([fetchAgentLog(reportId, version), fetchConsoleLog(reportId, version)])
+  } catch (err) {
+    if (!isCurrentRequest(reportId, version)) return
+    reportError.value = err.message || 'Bericht konnte nicht geladen werden.'
+    // Neue Reports werden asynchron gespeichert; 404, kurze Schreibfehler
+    // und Netzwerkausfaelle sind deshalb nicht sofort ein endgueltiger Fehler.
+    const status = err.response?.status
+    const retryable = status === 404 || status >= 500 || (err.isAxiosError && !err.response)
+    if (retryable && failedReads < 2) {
+      reportError.value += ` Automatischer neuer Versuch (${failedReads + 1}/2) ...`
+      emit('update-status', 'error')
+      pollTimer = setTimeout(() => refreshReport(reportId, version, failedReads + 1), 2000)
+      return
+    }
+    emit('update-status', 'error')
   }
-})
+
+  if (isCurrentRequest(reportId, version) && !isComplete.value && !reportError.value) {
+    pollTimer = setTimeout(() => refreshReport(reportId, version), 2000)
+  }
+}
+
+const restartReport = () => {
+  stopPolling()
+  const version = ++loadVersion
+  agentLogs.value = []
+  consoleLogs.value = []
+  agentLogLine.value = 0
+  consoleLogLine.value = 0
+  reportOutline.value = null
+  currentSectionIndex.value = null
+  generatedSections.value = {}
+  expandedContent.value = new Set()
+  expandedLogs.value = new Set()
+  collapsedSections.value = new Set()
+  isComplete.value = false
+  reportError.value = ''
+  startTime.value = null
+  emit('update-status', 'processing')
+  if (props.reportId) {
+    addLog(`Bericht wird geladen: ${props.reportId}`)
+    refreshReport(props.reportId, version)
+  }
+}
 
 onUnmounted(() => {
+  loadVersion++
   stopPolling()
 })
 
-watch(() => props.reportId, (newId) => {
-  if (newId) {
-    agentLogs.value = []
-    consoleLogs.value = []
-    agentLogLine.value = 0
-    consoleLogLine.value = 0
-    reportOutline.value = null
-    currentSectionIndex.value = null
-    generatedSections.value = {}
-    expandedContent.value = new Set()
-    expandedLogs.value = new Set()
-    collapsedSections.value = new Set()
-    isComplete.value = false
-    startTime.value = null
-    
-    startPolling()
-  }
-}, { immediate: true })
+watch(() => props.reportId, restartReport, { immediate: true })
 </script>
 
 <style scoped>
@@ -2209,6 +2249,17 @@ watch(() => props.reportId, (newId) => {
   font-family: 'Inter', 'Noto Sans SC', system-ui, sans-serif;
   overflow: hidden;
 }
+
+.report-error {
+  margin: 24px;
+  padding: 16px;
+  border: 1px solid #e7bcbc;
+  background: #fff7f7;
+  color: #922b2b;
+}
+
+.report-error p { margin: 0 0 12px; }
+.report-error button { padding: 8px 12px; cursor: pointer; }
 
 /* Main Split Layout */
 .main-split-layout {

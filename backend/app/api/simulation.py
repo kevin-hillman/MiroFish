@@ -747,6 +747,32 @@ def get_prepare_status():
         }), 500
 
 
+def _simulation_readback(state, run_state):
+    """Aktuellen Laufstatus ausgeben, ohne archivierte Eingaben umzuschreiben."""
+    result = state.to_dict()
+    result['runner_status'] = run_state.runner_status.value if run_state else 'idle'
+    if not run_state or state.status not in (
+        SimulationStatus.RUNNING, SimulationStatus.PAUSED,
+        SimulationStatus.STOPPED, SimulationStatus.COMPLETED,
+    ):
+        return result
+
+    status_map = {
+        RunnerStatus.STARTING: SimulationStatus.RUNNING,
+        RunnerStatus.RUNNING: SimulationStatus.RUNNING,
+        RunnerStatus.PAUSED: SimulationStatus.PAUSED,
+        RunnerStatus.STOPPING: SimulationStatus.RUNNING,
+        RunnerStatus.STOPPED: SimulationStatus.STOPPED,
+        RunnerStatus.COMPLETED: SimulationStatus.COMPLETED,
+        RunnerStatus.FAILED: SimulationStatus.FAILED,
+    }
+    if run_state.runner_status in status_map:
+        result['status'] = status_map[run_state.runner_status].value
+        result['current_round'] = run_state.current_round
+        result['error'] = run_state.error
+    return result
+
+
 @simulation_bp.route('/<simulation_id>', methods=['GET'])
 def get_simulation(simulation_id: str):
     """Simulationsstatus abrufen"""
@@ -760,7 +786,7 @@ def get_simulation(simulation_id: str):
                 "error": f"Simulation existiert nicht: {simulation_id}"
             }), 404
         
-        result = state.to_dict()
+        result = _simulation_readback(state, SimulationRunner.get_run_state(simulation_id))
         
         # Falls Simulation bereit, Ausfuehrungsanleitung anhaengen
         if state.status == SimulationStatus.READY:
@@ -796,7 +822,7 @@ def list_simulations():
         
         return jsonify({
             "success": True,
-            "data": [s.to_dict() for s in simulations],
+            "data": [_simulation_readback(s, SimulationRunner.get_run_state(s.simulation_id)) for s in simulations],
             "count": len(simulations)
         })
         
@@ -912,7 +938,8 @@ def get_simulation_history():
         # Simulationsdaten anreichern, nur aus Simulationsdatei lesen
         enriched_simulations = []
         for sim in simulations:
-            sim_dict = sim.to_dict()
+            run_state = SimulationRunner.get_run_state(sim.simulation_id)
+            sim_dict = _simulation_readback(sim, run_state)
             
             # Simulationskonfigurationsinformationen abrufen (simulation_requirement aus simulation_config.json lesen)
             config = manager.get_simulation_config(sim.simulation_id)
@@ -931,7 +958,6 @@ def get_simulation_history():
                 recommended_rounds = 0
             
             # Ausfuehrungsstatus abrufen (tatsaechliche vom Benutzer eingestellte Rundenanzahl aus run_state.json lesen)
-            run_state = SimulationRunner.get_run_state(sim.simulation_id)
             if run_state:
                 sim_dict["current_round"] = run_state.current_round
                 sim_dict["runner_status"] = run_state.runner_status.value
